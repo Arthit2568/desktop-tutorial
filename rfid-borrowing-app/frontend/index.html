@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ระบบยืม-คืนครุภัณฑ์ RFID</title>
+  <link rel="stylesheet" href="css/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="logo-icon">📡</div>
+      <div class="logo-text">
+        <span class="logo-title">RFID Borrow</span>
+        <span class="logo-sub">ระบบยืม-คืนครุภัณฑ์</span>
+      </div>
+    </div>
+    <ul class="nav-links">
+      <li><a href="#" class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">🏠</span><span>แดชบอร์ด</span>
+      </a></li>
+      <li><a href="#" class="nav-item" data-page="rfid">
+        <span class="nav-icon">📶</span><span>สแกน RFID</span>
+      </a></li>
+      <li><a href="#" class="nav-item" data-page="borrowing">
+        <span class="nav-icon">📋</span><span>รายการยืม-คืน</span>
+      </a></li>
+      <li><a href="#" class="nav-item" data-page="equipment">
+        <span class="nav-icon">🔧</span><span>ครุภัณฑ์</span>
+      </a></li>
+      <li><a href="#" class="nav-item" data-page="students">
+        <span class="nav-icon">👤</span><span>นิสิต</span>
+      </a></li>
+    </ul>
+    <div class="ws-status" id="wsStatus">
+      <span class="ws-dot disconnected"></span>
+      <span class="ws-label">กำลังเชื่อมต่อ...</span>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Dashboard Page -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-header">
+        <h1>แดชบอร์ด</h1>
+        <p class="page-subtitle">ภาพรวมระบบยืม-คืนครุภัณฑ์</p>
+      </div>
+      <div class="stats-grid" id="statsGrid">
+        <div class="stat-card blue">
+          <div class="stat-icon">🔧</div>
+          <div class="stat-info">
+            <div class="stat-value" id="stat-total">-</div>
+            <div class="stat-label">ครุภัณฑ์ทั้งหมด</div>
+          </div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-icon">✅</div>
+          <div class="stat-info">
+            <div class="stat-value" id="stat-available">-</div>
+            <div class="stat-label">พร้อมให้ยืม</div>
+          </div>
+        </div>
+        <div class="stat-card orange">
+          <div class="stat-icon">📤</div>
+          <div class="stat-info">
+            <div class="stat-value" id="stat-borrowed">-</div>
+            <div class="stat-label">กำลังถูกยืม</div>
+          </div>
+        </div>
+        <div class="stat-card red">
+          <div class="stat-icon">⚠️</div>
+          <div class="stat-info">
+            <div class="stat-value" id="stat-overdue">-</div>
+            <div class="stat-label">เกินกำหนดคืน</div>
+          </div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-icon">👥</div>
+          <div class="stat-info">
+            <div class="stat-value" id="stat-students">-</div>
+            <div class="stat-label">นิสิตในระบบ</div>
+          </div>
+        </div>
+        <div class="stat-card teal">
+          <div class="stat-icon">📊</div>
+          <div class="stat-info">
+            <div class="stat-value" id="stat-records">-</div>
+            <div class="stat-label">รายการยืมทั้งหมด</div>
+          </div>
+        </div>
+      </div>
+      <div class="section-title">รายการยืมล่าสุด</div>
+      <div id="recentBorrows" class="record-list"></div>
+    </div>
+
+    <!-- RFID Scan Page -->
+    <div id="page-rfid" class="page">
+      <div class="page-header">
+        <h1>สแกน RFID</h1>
+        <p class="page-subtitle">สแกนบัตร RFID จาก ESP32 หรือทดสอบด้วย Tag ด้านล่าง</p>
+      </div>
+      <div class="rfid-scanner-area">
+        <div class="rfid-visual" id="rfidVisual">
+          <div class="rfid-ring ring1"></div>
+          <div class="rfid-ring ring2"></div>
+          <div class="rfid-ring ring3"></div>
+          <div class="rfid-icon">📡</div>
+          <div class="rfid-status-text" id="rfidStatusText">รอการสแกน...</div>
+        </div>
+        <div class="rfid-manual">
+          <div class="form-group">
+            <label>ทดสอบด้วย RFID Tag</label>
+            <div class="input-row">
+              <input type="text" id="manualRfid" placeholder="เช่น AA:BB:CC:DD" class="form-input" />
+              <button class="btn btn-primary" onclick="manualScan()">สแกน</button>
+            </div>
+          </div>
+          <div class="demo-tags">
+            <span class="tag-chip" onclick="quickScan('AA:BB:CC:DD')">AA:BB:CC:DD</span>
+            <span class="tag-chip" onclick="quickScan('11:22:33:44')">11:22:33:44</span>
+            <span class="tag-chip" onclick="quickScan('AA:11:BB:22')">AA:11:BB:22</span>
+            <span class="tag-chip" onclick="quickScan('FF:EE:DD:CC')">FF:EE:DD:CC</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RFID Result Card -->
+      <div id="rfidResult" class="rfid-result hidden">
+        <div class="result-card">
+          <div class="result-equip-photo">
+            <img id="resPhoto" src="" alt="รูปอุปกรณ์" onerror="this.src='css/no-image.svg'" />
+          </div>
+          <div class="result-equip-info">
+            <div class="equip-badge" id="resBadge"></div>
+            <h2 id="resName"></h2>
+            <div class="equip-meta">
+              <span class="meta-item"><strong>เลขครุภัณฑ์:</strong> <span id="resEquipId"></span></span>
+              <span class="meta-item"><strong>หมวดหมู่:</strong> <span id="resCategory"></span></span>
+            </div>
+            <div class="specs-box" id="resSpecs"></div>
+
+            <!-- Borrower info (shown when borrowed) -->
+            <div id="resBorrowerSection" class="borrower-section hidden">
+              <div class="section-divider">ข้อมูลผู้ยืม</div>
+              <div class="borrower-grid">
+                <div class="info-item"><span class="info-label">รหัสนิสิต</span><span class="info-value" id="resStudentId"></span></div>
+                <div class="info-item"><span class="info-label">ชื่อผู้ยืม</span><span class="info-value" id="resStudentName"></span></div>
+                <div class="info-item"><span class="info-label">อ.ที่ปรึกษา</span><span class="info-value" id="resAdvisor"></span></div>
+                <div class="info-item"><span class="info-label">ภาควิชา</span><span class="info-value" id="resDepartment"></span></div>
+                <div class="info-item"><span class="info-label">รายวิชาที่นำไปใช้</span><span class="info-value" id="resCourse"></span></div>
+                <div class="info-item"><span class="info-label">วันที่ยืม</span><span class="info-value" id="resBorrowDate"></span></div>
+                <div class="info-item"><span class="info-label">กำหนดคืน</span><span class="info-value" id="resExpectedReturn"></span></div>
+              </div>
+              <button class="btn btn-success full-width" id="resReturnBtn">
+                📥 คืนอุปกรณ์
+              </button>
+            </div>
+
+            <!-- Borrow form (shown when available) -->
+            <div id="resBorrowSection" class="borrow-section hidden">
+              <div class="section-divider">ยืมอุปกรณ์</div>
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>นิสิต *</label>
+                  <select id="borrowStudentSelect" class="form-input"></select>
+                </div>
+                <div class="form-group">
+                  <label>รายวิชาที่นำไปใช้</label>
+                  <input type="text" id="borrowCourse" placeholder="เช่น CPE-301 ระบบสมองกลฝังตัว" class="form-input" />
+                </div>
+                <div class="form-group">
+                  <label>วัตถุประสงค์</label>
+                  <input type="text" id="borrowPurpose" placeholder="เช่น โปรเจคจบการศึกษา" class="form-input" />
+                </div>
+                <div class="form-group">
+                  <label>กำหนดคืน</label>
+                  <input type="date" id="borrowExpectedReturn" class="form-input" />
+                </div>
+              </div>
+              <button class="btn btn-primary full-width" id="resBorrowBtn">
+                📤 ยืมอุปกรณ์
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Borrowing Records Page -->
+    <div id="page-borrowing" class="page">
+      <div class="page-header">
+        <h1>รายการยืม-คืน</h1>
+        <p class="page-subtitle">ประวัติการยืม-คืนครุภัณฑ์ทั้งหมด</p>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="searchEquip" placeholder="ค้นหาชื่อ/เลขครุภัณฑ์..." class="form-input search-input" />
+        <input type="text" id="searchStudent" placeholder="รหัสนิสิต..." class="form-input search-input-sm" />
+        <select id="filterStatus" class="form-input select-sm">
+          <option value="">ทุกสถานะ</option>
+          <option value="borrowed">กำลังยืม</option>
+          <option value="returned">คืนแล้ว</option>
+        </select>
+        <button class="btn btn-outline" onclick="loadBorrowingRecords()">🔍 ค้นหา</button>
+      </div>
+      <div id="borrowingList" class="record-list"></div>
+    </div>
+
+    <!-- Equipment Page -->
+    <div id="page-equipment" class="page">
+      <div class="page-header">
+        <h1>จัดการครุภัณฑ์</h1>
+        <button class="btn btn-primary" onclick="openEquipModal()">+ เพิ่มครุภัณฑ์</button>
+      </div>
+      <div id="equipmentGrid" class="equipment-grid"></div>
+    </div>
+
+    <!-- Students Page -->
+    <div id="page-students" class="page">
+      <div class="page-header">
+        <h1>จัดการข้อมูลนิสิต</h1>
+        <button class="btn btn-primary" onclick="openStudentModal()">+ เพิ่มนิสิต</button>
+      </div>
+      <div id="studentList" class="record-list"></div>
+    </div>
+  </main>
+
+  <!-- Equipment Modal -->
+  <div id="equipModal" class="modal hidden">
+    <div class="modal-overlay" onclick="closeModal('equipModal')"></div>
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 id="equipModalTitle">เพิ่มครุภัณฑ์</h2>
+        <button class="modal-close" onclick="closeModal('equipModal')">✕</button>
+      </div>
+      <form id="equipForm" onsubmit="saveEquipment(event)">
+        <input type="hidden" id="equipId" />
+        <div class="form-grid">
+          <div class="form-group">
+            <label>RFID Tag *</label>
+            <input type="text" id="equipRfid" placeholder="AA:BB:CC:DD" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label>เลขประจำตัวครุภัณฑ์ *</label>
+            <input type="text" id="equipCode" placeholder="KHP-2024-001" class="form-input" required />
+          </div>
+          <div class="form-group full-span">
+            <label>ชื่ออุปกรณ์ *</label>
+            <input type="text" id="equipName" placeholder="ชื่ออุปกรณ์" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label>หมวดหมู่</label>
+            <input type="text" id="equipCategory" placeholder="เช่น Microcontroller" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label>รูปภาพอุปกรณ์</label>
+            <input type="file" id="equipPhoto" accept="image/*" class="form-input" />
+          </div>
+          <div class="form-group full-span">
+            <label>สเปครุ่นอุปกรณ์</label>
+            <textarea id="equipSpecs" placeholder="MCU: ..., RAM: ..., Flash: ..." class="form-input textarea" rows="4"></textarea>
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeModal('equipModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary">บันทึก</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Student Modal -->
+  <div id="studentModal" class="modal hidden">
+    <div class="modal-overlay" onclick="closeModal('studentModal')"></div>
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>เพิ่ม/แก้ไขนิสิต</h2>
+        <button class="modal-close" onclick="closeModal('studentModal')">✕</button>
+      </div>
+      <form id="studentForm" onsubmit="saveStudent(event)">
+        <input type="hidden" id="studentDbId" />
+        <div class="form-grid">
+          <div class="form-group">
+            <label>รหัสนิสิต *</label>
+            <input type="text" id="studentCode" placeholder="64010001" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label>ชื่อ-นามสกุล *</label>
+            <input type="text" id="studentName" placeholder="นายสมชาย ใจดี" class="form-input" required />
+          </div>
+          <div class="form-group">
+            <label>อ.ที่ปรึกษา</label>
+            <input type="text" id="studentAdvisor" placeholder="ผศ.ดร.วิชัย มีความรู้" class="form-input" />
+          </div>
+          <div class="form-group">
+            <label>ภาควิชา</label>
+            <input type="text" id="studentDept" placeholder="วิศวกรรมคอมพิวเตอร์" class="form-input" />
+          </div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" onclick="closeModal('studentModal')">ยกเลิก</button>
+          <button type="submit" class="btn btn-primary">บันทึก</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
