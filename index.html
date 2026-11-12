@@ -194,7 +194,7 @@ details p{margin:8px 0 0;max-width:65ch}
     <p>การตรวจคำใช้ระบบรู้จำเสียงของเบราว์เซอร์ (Chrome หรือ Edge และต้องต่ออินเทอร์เน็ต) ซึ่งส่งเสียงไปประมวลผลที่ผู้ให้บริการเบราว์เซอร์ ระบบนี้อาจเดาคำให้ถูกแม้ออกเสียงไม่ชัด จึงควรฟังเสียงตัวเองประกอบทุกครั้ง</p>
     <p>เกณฑ์ในผลตรวจเป็นแนวทางสำหรับฝึก ไม่ใช่การวินิจฉัย ถ้ามีปัญหาการพูดหรือเสียงแหบเรื้อรัง ควรพบนักแก้ไขการพูด</p>
   </details>
-  <p id="ver" class="r-note" style="margin:0;text-align:center">รุ่น 12 พ.ย. 14:12</p>
+  <p id="ver" class="r-note" style="margin:0;text-align:center">รุ่น 12 พ.ย. 14:15</p>
 </div>
 
 <script>
@@ -400,6 +400,7 @@ function stop(){
   $("mic").classList.remove("on");$("mic").setAttribute("aria-label","เริ่มอัดเสียง");$("micLabel").textContent="แตะเพื่อพูดอีกครั้ง";
   $("level").style.width="0";prevKey=key();
   analyze();draw();
+  if(asrState==="mobile"&&$("asrRow")){say("วัดเสียงเสร็จแล้ว ตอนนี้พูดประโยคเดิมอีกครั้งเพื่อตรวจคำ");$("micLabel").textContent="กำลังฟังเพื่อตรวจคำ พูดอีกครั้ง";soloAsr()}
 }
 function say(t){const m=$("msg");m.textContent=t;m.hidden=false}
 const dB=x=>20*Math.log10(Math.max(x,1e-4));
@@ -657,14 +658,14 @@ function renderAsr(){
       "language-not-supported":"บริการรู้จำเสียงของเบราว์เซอร์นี้ไม่รองรับภาษาไทย","audio-capture":"ระบบรู้จำเสียงเข้าถึงไมโครโฟนไม่ได้ อาจมีโปรแกรมอื่นใช้ไมค์อยู่",
       "start-failed":"เริ่มระบบรู้จำเสียงไม่ได้"}[asrErr]||"ระบบรู้จำเสียงหยุดทำงาน";
     r=row("ตรวจคำ","ใช้ไม่ได้","warn",why+(location.protocol==="file:"?" ไฟล์นี้เปิดจากเครื่องโดยตรง (file://) ซึ่ง Chrome มักไม่ให้ระบบรู้จำเสียงทำงาน":"")+" · รหัส: "+asrErr+" · ผลตรวจอื่นยังใช้ได้")}
-  else if(asrState==="mobile"&&!heard)r=row("ตรวจคำ","กดปุ่มเพื่อตรวจ","info","บนมือถือ ไมโครโฟนใช้ได้ทีละระบบ จึงตรวจคำพร้อมกับการอัดวัดเสียงไม่ได้ ผลวัดเสียงด้านบนใช้ได้ตามปกติ กดปุ่มด้านล่างแล้วพูดอีกครั้งเพื่อตรวจคำ");
+  else if(asrState==="mobile"&&!heard)r=row("ตรวจคำ","กดปุ่มเพื่อตรวจ","info","บนมือถือ ไมโครโฟนใช้ได้ทีละระบบ จึงตรวจคำเป็นรอบที่สองหลังวัดเสียง กดปุ่มด้านล่างแล้วพูดอีกครั้งเพื่อตรวจคำ");
   else if(!heard){
     const quiet=lastLv!=null&&lastLv<-35,lvTxt=lastLv!=null?" ระดับเสียงที่วัดได้เฉลี่ย "+lastLv.toFixed(0)+" dB":"";
     let why=!asrAudio?"ระบบรู้จำเสียงไม่ได้รับสัญญาณจากไมโครโฟน อาจถูกกันเมื่ออัดพร้อมกัน หรือ Chrome ใช้ไมค์คนละตัว"
       :!asrSpeech?"ระบบรู้จำเสียงได้รับสัญญาณ แต่เบาเกินกว่าจะนับเป็นเสียงพูด":"ระบบรู้จำเสียงได้ยินเสียงพูด แต่ถอดเป็นคำไม่ได้";
     why+="."+lvTxt+(quiet?" ซึ่งเบา ให้เพิ่มระดับไมโครโฟนในการตั้งค่าเสียงของเครื่อง จนเสียงพูดปกติอยู่ราว -25 ถึง -12 dB":"");
     if(micName)why+=" · ไมค์ที่ใช้อัด: "+micName+" ตรวจว่า Chrome เลือกไมค์ตัวเดียวกันที่ chrome://settings/content/microphone";
-    if(asrSolo)why="ตรวจคำอย่างเดียวก็ยังไม่ได้คำ ปัญหาจึงอยู่ที่ระดับเสียงไมค์หรือไมค์ที่ Chrome เลือก ไม่ใช่การอัดพร้อมกัน."+lvTxt;
+    if(asrSolo)why=MOBILE?"รอบตรวจคำไม่ได้คำกลับมา กดปุ่มด้านล่างแล้วพูดทันทีหลังได้ยินเสียงสัญญาณ ให้ชัดและใกล้ไมค์":"ตรวจคำอย่างเดียวก็ยังไม่ได้คำ ปัญหาจึงอยู่ที่ระดับเสียงไมค์หรือไมค์ที่ Chrome เลือก ไม่ใช่การอัดพร้อมกัน."+lvTxt;
     r=row("ตรวจคำ","ไม่ได้ยินคำ","warn",why)}
   else r=it.k==="free"?freeRow(heard):detailRow(it.t,heard);
   if(!heard||asrState==="error"){const b=document.createElement("button");b.className="mini";b.textContent="ตรวจคำอย่างเดียว (พูดอีกครั้ง)";b.onclick=soloAsr;r.appendChild(b)}
@@ -679,7 +680,7 @@ function soloAsr(){
     solo.onresult=e=>{takeResults(e);
       say("ระบบได้ยินว่า: "+(asrText+asrInterim))};
     solo.onerror=e=>{if(e.error!=="no-speech"&&e.error!=="aborted"){asrErr=e.error||"unknown";asrState="error"}};
-    solo.onend=()=>{if(asrState==="listening")asrState="done";solo=null;renderAsr()};
+    solo.onend=()=>{if(asrState==="listening")asrState="done";solo=null;if(!recording)$("micLabel").textContent="แตะเพื่อพูดอีกครั้ง";renderAsr();if((asrText+asrInterim).trim())$("msg").hidden=true};
     solo.start();setTimeout(()=>{if(solo){try{solo.stop()}catch(e){}}},15000);
   }catch(e){asrErr="start-failed";asrState="error";solo=null;renderAsr()}
 }
