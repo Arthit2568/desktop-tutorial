@@ -194,7 +194,7 @@ details p{margin:8px 0 0;max-width:65ch}
     <p>การตรวจคำใช้ระบบรู้จำเสียงของเบราว์เซอร์ (Chrome หรือ Edge และต้องต่ออินเทอร์เน็ต) ซึ่งส่งเสียงไปประมวลผลที่ผู้ให้บริการเบราว์เซอร์ ระบบนี้อาจเดาคำให้ถูกแม้ออกเสียงไม่ชัด จึงควรฟังเสียงตัวเองประกอบทุกครั้ง</p>
     <p>เกณฑ์ในผลตรวจเป็นแนวทางสำหรับฝึก ไม่ใช่การวินิจฉัย ถ้ามีปัญหาการพูดหรือเสียงแหบเรื้อรัง ควรพบนักแก้ไขการพูด</p>
   </details>
-  <p id="ver" class="r-note" style="margin:0;text-align:center">รุ่น 12 พ.ย. 14:06</p>
+  <p id="ver" class="r-note" style="margin:0;text-align:center">รุ่น 12 พ.ย. 14:12</p>
 </div>
 
 <script>
@@ -229,7 +229,8 @@ const DRILLS=[
  {name:"พิมพ์เอง",hint:"พิมพ์คำหรือประโยค แล้วกดไมค์",custom:true,items:[{t:"",k:"s"}]}
 ];
 const $=id=>document.getElementById(id);
-const ISFILE=location.protocol==="file:";let starting=false;
+const ISFILE=location.protocol==="file:";const MOBILE=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);let asrTrack=null;
+function asrGo(){try{asrTrack=stream.getAudioTracks()[0].clone();asr.start(asrTrack)}catch(e){asr.start()}}let starting=false;
 let asrFinals=[],lastSpeakSec=0;
 const MAXSEC=600;let wake=null,gateOn=false,asrErr="",asrInterim="",asrAudio=false,asrSpeech=false,asrSolo=false,lastLv=null,micName="",solo=null;
 const mmss=t=>Math.floor(t/60)+":"+String(Math.floor(t%60)).padStart(2,"0");
@@ -349,7 +350,8 @@ async function start2(){
   ac=new (window.AudioContext||window.webkitAudioContext)();
   const src=ac.createMediaStreamSource(stream);analyser=ac.createAnalyser();analyser.fftSize=2048;src.connect(analyser);
   buf=new Float32Array(analyser.fftSize);spec=new Float32Array(analyser.frequencyBinCount);
-  if(SR&&["w","s","asp","free"].includes(it.k)){
+  if(MOBILE&&SR&&["w","s","asp","free"].includes(it.k))asrState="mobile";
+  if(SR&&!MOBILE&&["w","s","asp","free"].includes(it.k)){
     asrErr="";asrInterim="";asrAudio=asrSpeech=asrSolo=false;asrState="listening";
     let ready=()=>{};const waitP=new Promise(r=>{ready=r;setTimeout(r,9000)});
     try{asr=new SR();asr.lang="th-TH";asr.maxAlternatives=5;asr.continuous=true;asr.interimResults=true;
@@ -357,9 +359,9 @@ async function start2(){
       asr.onresult=e=>{takeResults(e);
         if(recording)say("ระบบได้ยินว่า: "+(asrText+asrInterim))};
       asr.onerror=e=>{if(e.error!=="no-speech"&&e.error!=="aborted"){asrErr=e.error||"unknown";asrState="error"}ready()};
-      asr.onend=()=>{if(recording&&asrState==="listening"&&!ISFILE){asrText+=asrInterim;asrInterim="";try{asr.start();return}catch(x){}}
+      asr.onend=()=>{if(recording&&asrState==="listening"&&!ISFILE){asrText+=asrInterim;asrInterim="";try{asr.start(asrTrack&&asrTrack.readyState==="live"?asrTrack:undefined);return}catch(x){try{asr.start();return}catch(y){}}}
         if(asrState==="listening"||asrState==="wait")asrState="done";if(!recording)renderAsr()};
-      asr.start();if(ISFILE)say("กำลังอัดเสียงแล้ว พูดได้เลย ถ้า Chrome ขึ้นกล่องถามเรื่องไมโครโฟนอีกครั้ง ให้กด Allow while visiting the site เพื่อเปิดการตรวจคำ");
+      asrGo();if(ISFILE)say("กำลังอัดเสียงแล้ว พูดได้เลย ถ้า Chrome ขึ้นกล่องถามเรื่องไมโครโฟนอีกครั้ง ให้กด Allow while visiting the site เพื่อเปิดการตรวจคำ");
       waitP.then(()=>{if(recording&&asrAudio)$("msg").hidden=true})}catch(e){asr=null;asrErr="start-failed";asrState="error"}
   }
   chunks=[];try{recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
@@ -394,7 +396,7 @@ function stop(){
   if(!recording)return;recording=false;cancelAnimationFrame(raf);
   if(recorder&&recorder.state!=="inactive")recorder.stop();
   if(asr&&asrState==="listening"){asrState="wait";try{asr.stop()}catch(e){asrState="error"}}
-  stream.getTracks().forEach(t=>t.stop());ac.close();try{if(wake){wake.release();wake=null}}catch(e){}
+  stream.getTracks().forEach(t=>t.stop());try{if(asrTrack){asrTrack.stop();asrTrack=null}}catch(e){}ac.close();try{if(wake){wake.release();wake=null}}catch(e){}
   $("mic").classList.remove("on");$("mic").setAttribute("aria-label","เริ่มอัดเสียง");$("micLabel").textContent="แตะเพื่อพูดอีกครั้ง";
   $("level").style.width="0";prevKey=key();
   analyze();draw();
@@ -655,6 +657,7 @@ function renderAsr(){
       "language-not-supported":"บริการรู้จำเสียงของเบราว์เซอร์นี้ไม่รองรับภาษาไทย","audio-capture":"ระบบรู้จำเสียงเข้าถึงไมโครโฟนไม่ได้ อาจมีโปรแกรมอื่นใช้ไมค์อยู่",
       "start-failed":"เริ่มระบบรู้จำเสียงไม่ได้"}[asrErr]||"ระบบรู้จำเสียงหยุดทำงาน";
     r=row("ตรวจคำ","ใช้ไม่ได้","warn",why+(location.protocol==="file:"?" ไฟล์นี้เปิดจากเครื่องโดยตรง (file://) ซึ่ง Chrome มักไม่ให้ระบบรู้จำเสียงทำงาน":"")+" · รหัส: "+asrErr+" · ผลตรวจอื่นยังใช้ได้")}
+  else if(asrState==="mobile"&&!heard)r=row("ตรวจคำ","กดปุ่มเพื่อตรวจ","info","บนมือถือ ไมโครโฟนใช้ได้ทีละระบบ จึงตรวจคำพร้อมกับการอัดวัดเสียงไม่ได้ ผลวัดเสียงด้านบนใช้ได้ตามปกติ กดปุ่มด้านล่างแล้วพูดอีกครั้งเพื่อตรวจคำ");
   else if(!heard){
     const quiet=lastLv!=null&&lastLv<-35,lvTxt=lastLv!=null?" ระดับเสียงที่วัดได้เฉลี่ย "+lastLv.toFixed(0)+" dB":"";
     let why=!asrAudio?"ระบบรู้จำเสียงไม่ได้รับสัญญาณจากไมโครโฟน อาจถูกกันเมื่ออัดพร้อมกัน หรือ Chrome ใช้ไมค์คนละตัว"
