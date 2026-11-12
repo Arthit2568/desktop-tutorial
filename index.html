@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>ห้องตรวจเสียง</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column, like a tuner — phrase on top, one big mic button, one graph, one verdict list. */
+:root{
+  --bg:#eef2f3; --panel:#ffffff; --ink:#12242b; --muted:#5a6c73; --line:#d3dcdf;
+  --accent:#0b6e6e; --accent-ink:#ffffff; --trace:#c42d78; --trace-prev:#b3c0c5; --loud:#8fc3c2;
+  --good:#1c7a45; --warn:#a05a00; --rec:#c8322b; --chip:#e2e9eb;
+  --display:"Chakra Petch","IBM Plex Sans Thai","Leelawadee UI","Thonburi",sans-serif;
+  --body:"IBM Plex Sans Thai","Leelawadee UI","Thonburi","Noto Sans Thai",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e1a1f; --panel:#16262d; --ink:#e6eef0; --muted:#93a6ad; --line:#2a3d45;
+    --accent:#4cc2bd; --accent-ink:#06211f; --trace:#ff7ab8; --trace-prev:#41575f; --loud:#2f6f70;
+    --good:#5fd08e; --warn:#f0b354; --rec:#ff6b62; --chip:#1f333b; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e1a1f; --panel:#16262d; --ink:#e6eef0; --muted:#93a6ad; --line:#2a3d45;
+  --accent:#4cc2bd; --accent-ink:#06211f; --trace:#ff7ab8; --trace-prev:#41575f; --loud:#2f6f70;
+  --good:#5fd08e; --warn:#f0b354; --rec:#ff6b62; --chip:#1f333b; color-scheme:dark;
+}
+*{box-sizing:border-box}
+html{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.6}
+[hidden]{display:none!important}
+.wrap{max-width:720px;margin:0 auto;padding-block:20px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;flex-direction:column;gap:18px}
+header h1{font-family:var(--display);font-weight:700;font-size:1.6rem;margin:0;letter-spacing:.01em}
+header p{margin:2px 0 0;color:var(--muted);font-size:.95rem}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.chip{font:500 .95rem var(--body);color:var(--ink);background:var(--chip);border:1px solid transparent;
+  border-radius:999px;padding:6px 14px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+button:focus-visible,input:focus-visible,summary:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 16px;
+  display:flex;flex-direction:column;gap:16px;min-width:0}
+.phrase-row{display:flex;align-items:center;gap:8px}
+.nav{flex:none;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:transparent;
+  color:var(--ink);font-size:1.2rem;cursor:pointer}
+.phrase{flex:1;min-width:0;text-align:center;font-family:var(--body);font-weight:600;
+  font-size:clamp(1.5rem,6vw,2.3rem);line-height:1.35;text-wrap:balance;overflow-wrap:anywhere}
+.meta{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:.9rem;text-align:center}
+.meta button{font:500 .9rem var(--body);color:var(--accent);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
+#custom{width:100%;font:400 1rem var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);
+  border-radius:10px;padding:10px 12px}
+.mic-zone{display:flex;flex-direction:column;align-items:center;gap:8px}
+#mic{width:96px;height:96px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);
+  cursor:pointer;display:grid;place-items:center;position:relative}
+#mic svg{width:40px;height:40px}
+#mic.on{background:var(--rec);color:#fff}
+#mic.on::after{content:"";position:absolute;inset:-8px;border-radius:50%;border:3px solid var(--rec);
+  opacity:.5;animation:pulse 1.2s ease-out infinite}
+@keyframes pulse{from{transform:scale(.92);opacity:.6}to{transform:scale(1.12);opacity:0}}
+@media (prefers-reduced-motion: reduce){#mic.on::after{animation:none}}
+#micLabel{font-weight:500}
+#clock{font-family:var(--display);font-variant-numeric:tabular-nums;color:var(--muted)}
+.meter{width:min(260px,100%);height:8px;border-radius:4px;background:var(--chip);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--accent)}
+.graph{position:relative}
+canvas{display:block;width:100%;height:210px;border-radius:10px;background:var(--bg)}
+.legend{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:.82rem;color:var(--muted);margin-top:6px}
+.legend span::before{content:"";display:inline-block;width:14px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle;background:var(--k)}
+#envNote{margin:0;padding:12px 14px;border-radius:10px;border:1.5px solid var(--warn);color:var(--ink);font-size:.95rem}
+.wchips{display:flex;flex-wrap:wrap;gap:6px}
+.wchips span{background:var(--chip);border-radius:999px;padding:2px 10px;font-size:.95rem}
+.wchips span.flag{outline:2px solid var(--warn)}
+#msg{margin:0;padding:10px 12px;border-radius:10px;background:var(--chip);font-size:.95rem}
+h2{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0}
+#results{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+#results li{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:12px 0;border-top:1px solid var(--line);align-items:center}
+#results li:first-child{border-top:0}
+.r-name{font-weight:600}
+.r-note{grid-column:1/-1;color:var(--muted);font-size:.92rem;overflow-wrap:anywhere}
+.pill{font:600 .8rem var(--body);padding:2px 10px;border-radius:999px;border:1.5px solid currentColor;white-space:nowrap}
+.pill.good{color:var(--good)} .pill.warn{color:var(--warn)} .pill.info{color:var(--muted)}
+audio{width:100%}
+.readouts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}
+.readouts div,.stats div{background:var(--bg);border-radius:10px;padding:8px 6px;text-align:center;min-width:0}
+.readouts b,.stats b{display:block;font:600 1.45rem/1.3 var(--display);font-variant-numeric:tabular-nums}
+.stats b{font-size:1.1rem}
+.readouts span,.stats span{display:block;font-size:.78rem;color:var(--muted);line-height:1.35}
+.mini{grid-column:1/-1;justify-self:start;margin-top:6px;font:500 .9rem var(--body);border-radius:8px;padding:6px 12px;cursor:pointer;border:1px solid var(--accent);background:transparent;color:var(--accent)}
+.cmp{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;min-width:0;font-size:.93rem}
+.cmp .lab{display:block;color:var(--muted);font-size:.8rem}
+.cmp .big{font-size:1.3rem;font-weight:600;line-height:1.8;overflow-wrap:anywhere}
+.cmp .w{display:inline-block;margin-right:.5em}
+.g-ok{color:var(--good)}
+.g-bad{color:var(--warn);text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:5px}
+.cmp ul{margin:0;padding-left:1.2em;display:flex;flex-direction:column;gap:2px}
+.cmp .dim{color:var(--muted)}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:.88rem;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;text-align:left;border-top:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:500;border-top:0}
+td.txt{white-space:normal;min-width:120px}
+.gate{display:flex;align-items:center;gap:8px;font-size:.9rem;color:var(--muted);cursor:pointer}
+.gate input{width:18px;height:18px;accent-color:var(--accent)}
+.cons{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px}
+.cons input{width:64px;text-align:center;font:600 1.2rem var(--body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:6px}
+.h-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:4px 12px}
+.h-head span{color:var(--muted);font-size:.88rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:8px}
+.bars{display:flex;align-items:flex-end;gap:4px;height:150px;overflow-x:auto;padding-top:20px;border-bottom:1px solid var(--line)}
+.bar{flex:1 0 22px;max-width:40px;background:var(--loud);border-radius:4px 4px 0 0;position:relative;min-height:2px}
+.bar.best{background:var(--accent)}
+.bar i{position:absolute;top:-17px;left:50%;transform:translateX(-50%);font:normal .68rem var(--body);color:var(--muted);white-space:nowrap}
+.h-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.h-actions button{font:500 .9rem var(--body);border-radius:8px;padding:6px 12px;cursor:pointer;border:1px solid var(--line);background:transparent;color:var(--ink)}
+#hYes{border-color:var(--rec);color:var(--rec)}
+details{color:var(--muted);font-size:.92rem}
+details summary{cursor:pointer;color:var(--ink);font-weight:500}
+details p{margin:8px 0 0;max-width:65ch}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>ห้องตรวจเสียง</h1>
+    <p>เลือกแบบฝึก กดไมค์ แล้วพูดหรือเปล่งเสียง ผลตรวจเสียงและลมขึ้นทันทีเมื่อหยุด อัดต่อเนื่องได้นานสุด 10 นาที</p>
+  </header>
+
+  <p id="envNote" hidden></p>
+  <div class="chips" id="chips" role="group" aria-label="หมวดแบบฝึก"></div>
+
+  <section class="stage" aria-label="แบบฝึก">
+    <div class="phrase-row">
+      <button class="nav" id="prev" aria-label="ข้อก่อนหน้า">‹</button>
+      <div class="phrase" id="phrase" lang="th"></div>
+      <button class="nav" id="next" aria-label="ข้อถัดไป">›</button>
+    </div>
+    <input id="custom" type="text" placeholder="พิมพ์คำหรือประโยคที่อยากฝึก" hidden>
+    <div class="cons" id="consRow" hidden><label for="cons">เปลี่ยนอักษร</label><input id="cons" type="text" maxlength="3" value="ม" lang="th"><span class="chips" id="consChips"></span></div>
+    <div class="meta"><span id="hint"></span><span id="count"></span><button id="model" hidden>ฟังเสียงต้นแบบ</button></div>
+
+    <div class="mic-zone">
+      <button id="mic" aria-label="เริ่มอัดเสียง">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+      </button>
+      <div id="micLabel">แตะเพื่อเริ่มพูด</div>
+      <div class="meter" aria-hidden="true"><i id="level"></i></div>
+      <div class="readouts" aria-live="off">
+        <div><b id="dbNow">–</b><span>dB ความดัง</span></div>
+        <div><b id="hzNow">–</b><span id="hzLab">Hz ความถี่</span></div>
+        <div><b id="lenNow">0.0</b><span>วินาที ความยาวลม</span></div>
+      </div>
+      <label class="gate"><input type="checkbox" id="gate"> ตัดช่วงเงียบอัตโนมัติ (gate)</label>
+    </div>
+
+    <p id="msg" hidden></p>
+
+    <div class="graph">
+      <canvas id="cv" aria-label="กราฟระดับเสียงสูงต่ำและความดัง"></canvas>
+      <div class="legend">
+        <span style="--k:var(--trace)">ระดับเสียงสูงต่ำ (Hz)</span>
+        <span style="--k:var(--loud)">ความดัง</span>
+        <span style="--k:var(--trace-prev)">ครั้งก่อน</span>
+      </div>
+    </div>
+
+    <audio id="play" controls hidden></audio>
+  </section>
+
+  <section class="stage" aria-label="ผลตรวจ">
+    <h2>ผลตรวจ</h2>
+    <ul id="results"></ul>
+  </section>
+
+  <section class="stage" aria-label="ผลการฝึก">
+    <div class="h-head"><h2>ผลการฝึก</h2><span id="hSum"></span></div>
+    <p id="hEmpty" class="r-note" style="margin:0">ยังไม่มีข้อมูลของแบบฝึกนี้ ผลจะถูกบันทึกในเครื่องนี้ทุกครั้งที่กดหยุด</p>
+    <div class="stats" id="hStats" hidden></div>
+    <div class="bars" id="hBars" hidden></div>
+    <div class="r-note" id="hCap" hidden></div>
+    <div id="hLogWrap" hidden><div class="r-note">บันทึกล่าสุดของทุกแบบฝึก</div><div class="tblwrap"><table id="hLog"></table></div></div>
+    <p id="hWarn" class="r-note" style="margin:0" hidden></p>
+    <div class="h-actions"><button id="hCsv" hidden>บันทึกเป็นไฟล์ CSV</button><button id="hClear" hidden>ล้างข้อมูลการฝึกทั้งหมด</button><button id="hYes" hidden>ยืนยัน ล้างทั้งหมด</button><button id="hNo" hidden>ยกเลิก</button></div>
+  </section>
+
+  <details>
+    <summary>เครื่องมือนี้ตรวจอะไรได้ และตรวจอะไรไม่ได้</summary>
+    <p>ความดัง ระดับเสียงสูงต่ำ ความยาว และความเร็ว วัดจากคลื่นเสียงโดยตรงในเครื่องของคุณ เสียงที่อัดไม่ถูกส่งออกไปไหน</p>
+    <p>ค่าเริ่มต้นไม่มีการตัดเสียงเบา (ไม่มี gate) เสียงทุกระดับตั้งแต่กดไมค์จนกดหยุดถูกนำมาวัดทั้งหมด ความยาวลมจึงนับตั้งแต่กดไมค์จนกดหยุด ให้กดไมค์เมื่อพร้อมเปล่งเสียงและกดหยุดทันทีที่ลมหมด ถ้าเปิดตัวเลือกตัดช่วงเงียบ เครื่องมือจะตัดช่วงที่เบากว่าเกณฑ์ออกและนับจุดหยุดหายใจให้ แต่เสียงที่เบามากอาจถูกตัดไปด้วย</p>
+    <p>dB ในเครื่องมือนี้คือ dBFS ซึ่งเทียบกับระดับสูงสุดที่ไมโครโฟนรับได้ (0 dB) ค่าจึงติดลบเสมอ และยิ่งใกล้ 0 ยิ่งดัง ค่านี้ไม่ใช่ระดับความดันเสียง (dB SPL) และเปลี่ยนตามระยะห่างจากไมโครโฟน ให้วางเครื่องระยะเดิมทุกครั้งเพื่อเทียบผลได้ Hz คือความถี่มูลฐานของเสียงก้อง ส่วนเสียงลมอย่าง ซ ไม่มีความถี่มูลฐาน จึงแสดงความถี่ที่มีพลังงานมากที่สุดแทน</p>
+    <p>ผลการฝึกเก็บในเบราว์เซอร์ของเครื่องนี้เท่านั้น การล้างข้อมูลเบราว์เซอร์ ย้ายไฟล์ หรือเปลี่ยนชื่อไฟล์อาจทำให้ข้อมูลหาย</p>
+    <p>การวิเคราะห์ลมประเมินจากเสียงที่ไมโครโฟนรับได้ ไม่ได้วัดปริมาณลมโดยตรง ลมปนในเสียงคำนวณจากสัดส่วนเสียงก้องต่อเสียงซ่า ลมพ่นของพยัญชนะคำนวณจากช่วงเวลาระหว่างเสียงระเบิดกับเสียงก้อง ค่าคลาดเคลื่อนได้ราว 10 มิลลิวินาที และห้องที่มีเสียงรบกวนทำให้ค่าลมปนสูงเกินจริง</p>
+    <p>การตรวจคำใช้ระบบรู้จำเสียงของเบราว์เซอร์ (Chrome หรือ Edge และต้องต่ออินเทอร์เน็ต) ซึ่งส่งเสียงไปประมวลผลที่ผู้ให้บริการเบราว์เซอร์ ระบบนี้อาจเดาคำให้ถูกแม้ออกเสียงไม่ชัด จึงควรฟังเสียงตัวเองประกอบทุกครั้ง</p>
+    <p>เกณฑ์ในผลตรวจเป็นแนวทางสำหรับฝึก ไม่ใช่การวินิจฉัย ถ้ามีปัญหาการพูดหรือเสียงแหบเรื้อรัง ควรพบนักแก้ไขการพูด</p>
+  </details>
+</div>
+
+<script>
+"use strict";
+const DRILLS=[
+ {name:"ฝึกลม",hint:"หายใจเข้าลึกถึงท้อง ไหล่ไม่ยก",items:[
+  {t:"ซ…",k:"air",id:"hiss",sub:"Hissing: ปล่อยลม ซ ให้ยาวและสม่ำเสมอที่สุดในลมเดียว"},
+  {t:"",k:"vow",id:"vow",sub:"เปล่งต่อเนื่องในลมเดียว วนซ้ำได้จนลมหมด"}]},
+ {name:"ร / ล",hint:"ร ปลายลิ้นสะบัด ไม่แตะค้าง · ล ปลายลิ้นแตะปุ่มเหงือกค้างไว้",items:[
+  {t:"รัก ลัก",k:"w"},{t:"เรียน เลียน",k:"w"},{t:"รอง ลอง",k:"w"},{t:"ร้าน ล้าน",k:"w"},{t:"โรค โลก",k:"w"},
+  {t:"ครูเรไรรีบเร่งไปโรงเรียน",k:"s",syl:8},{t:"ลุงลอยเลี้ยงลิงที่ลพบุรี",k:"s",syl:8}]},
+ {name:"ควบกล้ำ",hint:"ออกเสียงพยัญชนะทั้งสองตัวให้ครบ",items:[
+  {t:"กราบ กาบ",k:"w"},{t:"ปลา ปา",k:"w"},{t:"ครู คู",k:"w"},{t:"กลอง กอง",k:"w"},{t:"กวาง กาง",k:"w"},
+  {t:"ปรับปรุงเปลี่ยนแปลง ครอบครัวกลมเกลียว",k:"s",syl:8}]},
+ {name:"วรรณยุกต์",hint:"ดูเส้นกราฟ: สามัญราบ · เอกต่ำ · โทสูงแล้วตก · ตรีสูงขึ้น · จัตวาต่ำแล้วขึ้น",items:[
+  {t:"ปา ป่า ป้า ป๊า ป๋า",k:"w"},{t:"คา ข่า ค่า ค้า ขา",k:"w"},
+  {t:"ไม้ใหม่ไม่ไหม้ ใช่ไหม",k:"s",syl:6},{t:"ใครขายไข่ไก่",k:"s",syl:4},{t:"เสือใส่เสื้อนั่งบนเสื่อ",k:"s",syl:6}]},
+ {name:"สระและตัวสะกด",hint:"สระยาวลากให้ยาวราวสองเท่า · ปิดเสียงท้ายให้ครบ",items:[
+  {t:"ปัก ปาก",k:"w"},{t:"ขัด ขาด",k:"w"},{t:"เข้า ข้าว",k:"w"},{t:"กับ กัด กัก",k:"w"},{t:"ลม ลน ลง",k:"w"}]},
+ {name:"ลิ้นพัน",hint:"เริ่มช้า ชัดทุกพยางค์ก่อนค่อยเร่ง",items:[
+  {t:"ระนอง ระยอง ยะลา",k:"s",syl:6},{t:"ชามเขียวคว่ำเช้า ชามขาวคว่ำค่ำ",k:"s",syl:8},
+  {t:"เช้าฟาดผัดฟัก เย็นฟาดฟักผัด",k:"s",syl:8},{t:"ยายมีขายหอย ยายมอยขายหมี",k:"s",syl:8},
+  {t:"กินมันติดเหงือก กินเผือกติดฟัน",k:"s",syl:8},{t:"ทหารถือปืนแบกปูนไปโบกตึก",k:"s",syl:9},
+  {t:"ยักษ์ใหญ่ไล่ยักษ์เล็ก",k:"s",syl:5}]},
+ {name:"ลมพ่น ป/พ",hint:"คำแรกไม่พ่นลม คำหลังพ่นลม · เว้นช่วงสั้น ๆ ระหว่างสองคำ",items:[
+  {t:"ปา พา",k:"asp"},{t:"ตา ทา",k:"asp"},{t:"กา คา",k:"asp"},{t:"ปู ภู",k:"asp"}]},
+ {name:"เปล่งเสียง",hint:"ใช้เสียงเบาถึงปานกลาง ไม่เกร็งคอ",items:[
+  {t:"อา…",k:"hold",sub:"ลากเสียงให้นิ่ง 5 วินาที"},
+  {t:"อืม…",k:"glide",sub:"ฮัมไล่จากต่ำขึ้นสูงแล้วลง"},
+  {t:"ซ…",k:"air",sub:"ปล่อยลมยาวสม่ำเสมอ 8 วินาที"}]},
+ {name:"พูดอิสระ",hint:"",items:[{t:"พูดอิสระ",k:"free",id:"free",sub:"กดไมค์แล้วพูดเรื่องอะไรก็ได้ ไม่ต้องพิมพ์ ระบบจะถอดคำและวิเคราะห์เสียงทั้งหมดให้"}]},
+ {name:"พิมพ์เอง",hint:"พิมพ์คำหรือประโยค แล้วกดไมค์",custom:true,items:[{t:"",k:"s"}]}
+];
+const $=id=>document.getElementById(id);
+const ISFILE=location.protocol==="file:";let starting=false;
+let asrFinals=[],lastSpeakSec=0;
+const MAXSEC=600;let wake=null,gateOn=false,asrErr="",asrInterim="",asrAudio=false,asrSpeech=false,asrSolo=false,lastLv=null,micName="",solo=null;
+const mmss=t=>Math.floor(t/60)+":"+String(Math.floor(t%60)).padStart(2,"0");
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+let cat=0,idx=0,recording=false,stream=null,ac=null,analyser=null,recorder=null,chunks=[],raf=0,t0=0,
+    frames=[],prev=null,prevKey="",buf=null,tick=0,lastF0=0,lastR=0,clip=0,asr=null,asrText="",asrState="none",thaiVoice=null,cons="ม",lastPk=0,spec=null,runStart=-1,lastAct=-9;
+
+try{const s=JSON.parse(localStorage.getItem("vc")||"{}");if(typeof s.cons==="string"&&s.cons)cons=s.cons;gateOn=!!s.gate;if(DRILLS[s.cat]){cat=s.cat;idx=Math.min(s.idx||0,DRILLS[cat].items.length-1)}}catch(e){}
+function save(){try{localStorage.setItem("vc",JSON.stringify({cat,idx,cons,gate:gateOn}))}catch(e){}}
+function vowText(){const c=cons||"ม";return c+"า เ"+c+" "+c+"ี โ"+c+" "+c+"ู"}
+function item(){const d=DRILLS[cat],it=d.items[idx];if(d.custom)return {t:$("custom").value.trim(),k:"s"};
+  return it.k==="vow"?Object.assign({},it,{t:vowText()}):it}
+function hk(){const it=item();return it.id||it.t}
+let memHist=[],storeOK=true;
+function loadHist(){try{const h=JSON.parse(localStorage.getItem("vc_hist")||"[]");if(Array.isArray(h)&&h.length>=memHist.length){memHist=h;return h}}catch(e){storeOK=false}return memHist}
+function pushHist(r){const h=loadHist().concat([r]).slice(-600);memHist=h;
+  try{localStorage.setItem("vc_hist",JSON.stringify(h));storeOK=JSON.parse(localStorage.getItem("vc_hist")||"[]").length===h.length}catch(e){storeOK=false}}
+const NOTES=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+function noteName(f){const n=Math.round(12*Math.log2(f/440))+69;return NOTES[((n%12)+12)%12]+(Math.floor(n/12)-1)}
+function renderHistory(){
+  const all=loadHist(),it=item(),mine=all.filter(r=>r.k===hk()),breath=["air","vow","hold","glide"].includes(it.k);
+  const days=new Set(all.map(r=>new Date(r.ts).toDateString())).size;
+  $("hSum").textContent=all.length?"รวมทุกแบบฝึก "+all.length+" ครั้ง ใน "+days+" วัน":"";
+  $("hClear").hidden=!all.length||!$("hYes").hidden;$("hCsv").hidden=!all.length;
+  $("hWarn").hidden=storeOK;$("hWarn").textContent="เบราว์เซอร์นี้ไม่ยอมให้บันทึกข้อมูลลงเครื่อง ผลการฝึกจะอยู่ถึงแค่ตอนปิดหน้านี้ กดบันทึกเป็นไฟล์ CSV เพื่อเก็บไว้";
+  $("hEmpty").textContent=all.length?"ยังไม่มีข้อมูลของแบบฝึกข้อนี้ ผลของข้ออื่นอยู่ในตารางด้านล่าง":"ยังไม่มีข้อมูล ผลจะถูกบันทึกทุกครั้งที่กดหยุดอัด";
+  const tb=$("hLog");tb.textContent="";$("hLogWrap").hidden=!all.length;
+  if(all.length){const mk=(tag,cells,cls)=>{const tr=document.createElement("tr");cells.forEach((c,i)=>{const x=document.createElement(tag);x.textContent=c;if(cls&&i===1)x.className=cls;tr.appendChild(x)});tb.appendChild(tr)};
+    mk("th",["เวลา","แบบฝึก","ยาว (วินาที)","dB","Hz","ผ่าน"]);
+    all.slice(-10).reverse().forEach(r=>mk("td",[new Date(r.ts).toLocaleString("th-TH",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"}),r.t||"–",
+      r.len!=null?r.len.toFixed(1):"–",r.lv!=null?Math.round(r.lv):"–",r.hz||"–",r.total?r.good+"/"+r.total:"–"],"txt"))}
+  const val=r=>breath?r.len:(r.total?r.good/r.total*100:null),fmt=v=>breath?v.toFixed(1)+" วินาที":Math.round(v)+"%";
+  const rows=mine.filter(r=>val(r)!=null).slice(-20),vs=rows.map(val),has=rows.length>0;
+  $("hEmpty").hidden=has;$("hStats").hidden=$("hBars").hidden=$("hCap").hidden=!has;if(!has)return;
+  const best=Math.max(...vs),lastR=rows[rows.length-1],st=$("hStats"),bars=$("hBars");st.textContent="";bars.textContent="";
+  [[fmt(vs[vs.length-1]),"ครั้งล่าสุด"],[fmt(best),"ดีที่สุด"],[fmt(mean(vs.slice(-5))),"เฉลี่ย 5 ครั้งล่าสุด"],[mine.length+" ครั้ง","จำนวนที่ฝึก"],
+   [lastR.lv+" dB","ความดังล่าสุด"],[lastR.hz?lastR.hz+" Hz":"–","ความถี่ล่าสุด"]].forEach(([a,b])=>{
+    const d=document.createElement("div"),x=document.createElement("b"),y=document.createElement("span");x.textContent=a;y.textContent=b;d.append(x,y);st.appendChild(d)});
+  const bi=vs.lastIndexOf(best);
+  rows.forEach((r,i)=>{const b=document.createElement("div"),l=document.createElement("i");b.className="bar"+(i===bi?" best":"");
+    b.style.height=Math.max(2,vs[i]/(best||1)*100)+"%";l.textContent=breath?vs[i].toFixed(1):Math.round(vs[i]);
+    b.title=new Date(r.ts).toLocaleString("th-TH")+" · "+fmt(vs[i]);b.appendChild(l);bars.appendChild(b)});
+  bars.scrollLeft=bars.scrollWidth;
+  $("hCap").textContent="แท่งละหนึ่งครั้ง เรียงจากเก่าไปใหม่ สูงสุด 20 ครั้งล่าสุด · "+(breath?"ความยาวลมในลมเดียว (วินาที)":"สัดส่วนข้อที่ผ่าน (%)");
+}
+function key(){return cat+":"+idx+":"+item().t}
+function css(n){return getComputedStyle(document.documentElement).getPropertyValue(n).trim()}
+
+function renderChips(){
+  const box=$("chips");box.textContent="";
+  DRILLS.forEach((d,i)=>{const b=document.createElement("button");b.className="chip";b.textContent=d.name;
+    b.setAttribute("aria-pressed",i===cat);b.onclick=()=>{if(recording)return;cat=i;idx=0;save();renderAll()};box.appendChild(b)});
+}
+function renderAll(){
+  renderChips();const d=DRILLS[cat],it=item();
+  $("custom").hidden=!d.custom;$("consRow").hidden=it.k!=="vow";
+  $("phrase").textContent=d.custom?(it.t||"ข้อความของคุณ"):it.t;
+  $("hint").textContent=it.sub||d.hint;
+  $("count").textContent=d.custom||d.items.length<2?"":"ข้อ "+(idx+1)+" จาก "+d.items.length;
+  $("prev").style.visibility=$("next").style.visibility=d.custom||d.items.length<2?"hidden":"visible";
+  $("model").hidden=!(thaiVoice&&it.t&&["w","s","asp"].includes(it.k));
+  $("play").hidden=true;$("msg").hidden=true;
+  frames=[];if(prevKey!==key())prev=null;
+  renderPending();draw();renderHistory();
+  $("dbNow").textContent=$("hzNow").textContent="–";$("hzLab").textContent="Hz ความถี่";$("lenNow").textContent="0.0";
+}
+function row(name,pill,cls,note){
+  const li=document.createElement("li"),a=document.createElement("span"),b=document.createElement("span"),c=document.createElement("span");
+  a.className="r-name";a.textContent=name;b.className="pill "+cls;b.textContent=pill;c.className="r-note";c.textContent=note;
+  li.append(a,b,c);return li;
+}
+function renderPending(){
+  const it=item(),ul=$("results");ul.textContent="";
+  const w=(n,t)=>ul.appendChild(row(n,"รอเสียง","info",t));
+  w("ความดัง","เสียงควรดังพอและไม่แตก");
+  if(it.k==="hold"){w("ความนิ่งของเสียง","ระดับเสียงไม่ควรแกว่งเกินครึ่งเสียง");w("ความยาว","เป้าหมาย 5 วินาทีขึ้นไป");w("แรงลม","ความดังไม่ควรตกเร็วกว่า 1.5 dB ต่อวินาที");w("ลมปนในเสียง","เสียงแน่นคือมีลมรั่วปนน้อย")}
+  else if(it.k==="glide"){w("ช่วงเสียง","ไล่ให้ได้กว้างอย่างน้อย 7 ครึ่งเสียง");w("ลมปนในเสียง","เสียงแน่นคือมีลมรั่วปนน้อย")}
+  else if(it.k==="air"){w("ความสม่ำเสมอของลม","ความดังไม่ควรแกว่งเกิน 4 dB");w(it.id==="hiss"?"ความยาวลม":"ความยาว",it.id==="hiss"?"วัดเป็นวินาทีในลมเดียว เทียบกับสถิติของคุณ":"เป้าหมาย 8 วินาทีขึ้นไป");w("แรงลม","ความดังไม่ควรตกเร็วกว่า 1.5 dB ต่อวินาที");w("ความถี่เสียงลม","ความถี่ที่มีพลังงานมากที่สุด หน่วย Hz")}
+  else if(it.k==="vow"){w("ความยาวลม","วัดเป็นวินาทีในลมเดียว เทียบกับสถิติของคุณ");w("ความดังสม่ำเสมอ","ทุกสระควรดังใกล้กัน แกว่งไม่เกิน 5 dB");w("แรงลม","ความดังไม่ควรตกเร็วกว่า 1.5 dB ต่อวินาที");w("ความถี่เสียง","ความถี่กลางของเสียง หน่วย Hz");w("ลมปนในเสียง","เสียงแน่นคือมีลมรั่วปนน้อย")}
+  else if(it.k==="asp"){w("ลมพ่นพยัญชนะ","คำแรกควรมีลมพ่นสั้นกว่า 35 มิลลิวินาที คำหลังยาวกว่า 45 มิลลิวินาที");if(SR)w("ตรวจคำ","ระบบรู้จำเสียงจะบอกว่าได้ยินเป็นคำว่าอะไร")}
+  else if(it.k==="free"){w("จังหวะและการหยุด","เวลาที่พูดจริง จำนวนครั้งที่หยุด และช่วงพูดต่อเนื่องนานสุด");w("ระดับเสียงสูงต่ำ","ความถี่กลางและช่วงกว้างของเสียง หน่วย Hz");w("ลมปนในเสียง","เสียงแน่นคือมีลมรั่วปนน้อย");
+    if(SR)w("ถอดคำพูด","ระบบจะถอดสิ่งที่คุณพูดเป็นข้อความ แล้วแยกคำควบกล้ำ คำที่มี ร และ ล พร้อมจุดที่ระบบลังเล")}
+  else{w("ลมปนในเสียง","เสียงแน่นคือมีลมรั่วปนน้อย");if(gateOn)w("ช่วงลมหายใจ","เมื่อพูดยาวกว่า 5 วินาที จะนับจุดหยุดหายใจและช่วงที่พูดได้ต่อหนึ่งลม");w("ท้ายประโยค","พยางค์สุดท้ายควรดังใกล้เคียงต้นประโยค");
+    if(it.syl)w("ความเร็ว","พูดชัดอยู่ที่ราว 2.5 ถึง 4.5 พยางค์ต่อวินาที");
+    w("ระดับเสียงสูงต่ำ","ดูรูปเส้นกราฟเทียบกับวรรณยุกต์ของคำ");
+    if(SR)w("ตรวจคำ","ระบบรู้จำเสียงจะบอกว่าได้ยินเป็นคำว่าอะไร")}
+}
+
+const NOP={f:0,r:0};
+function detectPitch(b,sr){
+  const n=1024;let c0=0;for(let i=0;i<n;i++)c0+=b[i]*b[i];
+  if(Math.sqrt(c0/n)<0.0003)return NOP;
+  const minLag=Math.max(2,Math.floor(sr/450)),maxLag=Math.min(Math.floor(sr/75),b.length-n-2);
+  const c=new Float32Array(maxLag+2);let gmax=0;
+  for(let lag=minLag-1;lag<=maxLag+1;lag++){let s=0,e=0;for(let i=0;i<n;i++){const y=b[i+lag];s+=b[i]*y;e+=y*y}
+    c[lag]=s/Math.sqrt(c0*e+1e-12);if(lag>=minLag&&lag<=maxLag&&c[lag]>gmax)gmax=c[lag]}
+  if(gmax<0.6)return NOP;
+  for(let lag=minLag;lag<=maxLag;lag++){
+    if(c[lag]>0.9*gmax&&c[lag]>=c[lag-1]&&c[lag]>=c[lag+1]){
+      const a=c[lag-1],m=c[lag],z=c[lag+1],den=a-2*m+z,sh=den?0.5*(a-z)/den:0;return {f:sr/(lag+sh),r:Math.min(m,0.999)}}}
+  return NOP;
+}
+
+async function start(){
+  if(starting)return;starting=true;try{await start2()}finally{starting=false}
+}
+async function start2(){
+  const it=item();
+  if(DRILLS[cat].custom&&!it.t){say("พิมพ์คำหรือประโยคก่อน แล้วกดไมค์อีกครั้ง");$("custom").focus();return}
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){say("เบราว์เซอร์นี้เปิดไมโครโฟนไม่ได้ ดาวน์โหลดไฟล์นี้แล้วเปิดด้วย Chrome หรือ Edge");return}
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})}
+  catch(e){say("ยังไม่ได้รับอนุญาตให้ใช้ไมโครโฟน กดอนุญาตที่แถบที่อยู่ของเบราว์เซอร์ แล้วกดไมค์อีกครั้ง ถ้าเปิดจากหน้าตัวอย่างในแชต ให้ดาวน์โหลดไฟล์แล้วเปิดด้วย Chrome");return}
+  $("msg").hidden=true;$("play").hidden=true;micName=(stream.getAudioTracks()[0]||{}).label||"";
+  if(solo){try{solo.abort()}catch(e){}solo=null}
+  if(frames.length&&prevKey===key())prev=frames;else prev=null;
+  frames=[];clip=0;tick=0;lastF0=0;lastR=0;lastPk=0;runStart=-1;lastAct=-9;asrText="";asrFinals=[];asrState="none";
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  const src=ac.createMediaStreamSource(stream);analyser=ac.createAnalyser();analyser.fftSize=2048;src.connect(analyser);
+  buf=new Float32Array(analyser.fftSize);spec=new Float32Array(analyser.frequencyBinCount);
+  if(SR&&["w","s","asp","free"].includes(it.k)){
+    asrErr="";asrInterim="";asrAudio=asrSpeech=asrSolo=false;asrState="listening";
+    let ready=()=>{};const waitP=new Promise(r=>{ready=r;setTimeout(r,9000)});
+    try{asr=new SR();asr.lang="th-TH";asr.maxAlternatives=5;asr.continuous=true;asr.interimResults=true;
+      asr.onaudiostart=()=>{asrAudio=true;ready()};asr.onspeechstart=()=>{asrSpeech=true};
+      asr.onresult=e=>{takeResults(e);
+        if(recording)say("ระบบได้ยินว่า: "+(asrText+asrInterim))};
+      asr.onerror=e=>{if(e.error!=="no-speech"&&e.error!=="aborted"){asrErr=e.error||"unknown";asrState="error"}ready()};
+      asr.onend=()=>{if(recording&&asrState==="listening"&&!ISFILE){asrText+=asrInterim;asrInterim="";try{asr.start();return}catch(x){}}
+        if(asrState==="listening"||asrState==="wait")asrState="done";if(!recording)renderAsr()};
+      asr.start();if(ISFILE)say("กำลังอัดเสียงแล้ว พูดได้เลย ถ้า Chrome ขึ้นกล่องถามเรื่องไมโครโฟนอีกครั้ง ให้กด Allow while visiting the site เพื่อเปิดการตรวจคำ");
+      waitP.then(()=>{if(recording&&asrAudio)$("msg").hidden=true})}catch(e){asr=null;asrErr="start-failed";asrState="error"}
+  }
+  chunks=[];try{recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};
+    recorder.onstop=()=>{const a=$("play");const bl=new Blob(chunks,{type:recorder.mimeType});a.src=URL.createObjectURL(bl);a.hidden=false;if(item().k==="asp")analyzeAsp(bl)};recorder.start()}catch(e){recorder=null}
+  recording=true;t0=performance.now();
+  try{if(navigator.wakeLock)navigator.wakeLock.request("screen").then(l=>{wake=l}).catch(()=>{})}catch(e){}
+  $("mic").classList.add("on");$("mic").setAttribute("aria-label","หยุดอัดเสียง");$("micLabel").textContent="กำลังฟัง แตะเพื่อหยุด";
+  loop();
+}
+function loop(){
+  if(!recording)return;
+  analyser.getFloatTimeDomainData(buf);
+  let s=0,pk=0;for(let i=0;i<buf.length;i++){const v=buf[i];s+=v*v;const a=v<0?-v:v;if(a>pk)pk=a}
+  const rms=Math.sqrt(s/buf.length);if(pk>=0.98)clip++;
+  if(tick++%2===0){const p=detectPitch(buf,ac.sampleRate);lastF0=p.f;lastR=p.r;lastPk=0;
+    if(!p.f){analyser.getFloatFrequencyData(spec);const hzBin=ac.sampleRate/analyser.fftSize;let bi=0,bv=-200;
+      for(let i=Math.ceil(500/hzBin);i<spec.length;i++)if(spec[i]>bv){bv=spec[i];bi=i}
+      if(bv>-105)lastPk=Math.round(bi*hzBin)}}
+  const t=(performance.now()-t0)/1000;frames.push({t,rms,f0:lastF0,r:lastR,pk:lastPk});
+  if(!gateOn||rms>0.004){if(runStart<0||t-lastAct>0.5)runStart=t;lastAct=t}
+  if(runStart>=0&&t-lastAct<=0.5)$("lenNow").textContent=(t-runStart).toFixed(1);
+  if(tick%6===0){$("micLabel").textContent="กำลังอัด "+mmss(t)+" แตะเพื่อหยุด";const d=dB(rms);$("dbNow").textContent=d>-79?d.toFixed(0):"–";
+    if(lastF0){$("hzNow").textContent=Math.round(lastF0);$("hzLab").textContent="Hz ความถี่ · "+noteName(lastF0)}
+    else if(lastPk){$("hzNow").textContent=lastPk;$("hzLab").textContent="Hz เสียงลม"}
+    else{$("hzNow").textContent="–";$("hzLab").textContent="Hz ความถี่"}}
+  $("level").style.width=Math.max(0,Math.min(100,(dB(rms)+80)/80*100))+"%";
+  draw();
+  if(t>=MAXSEC){stop();say("ครบ 10 นาทีแล้ว จึงหยุดอัดให้อัตโนมัติ");return}
+  raf=requestAnimationFrame(loop);
+}
+function stop(){
+  if(!recording)return;recording=false;cancelAnimationFrame(raf);
+  if(recorder&&recorder.state!=="inactive")recorder.stop();
+  if(asr&&asrState==="listening"){asrState="wait";try{asr.stop()}catch(e){asrState="error"}}
+  stream.getTracks().forEach(t=>t.stop());ac.close();try{if(wake){wake.release();wake=null}}catch(e){}
+  $("mic").classList.remove("on");$("mic").setAttribute("aria-label","เริ่มอัดเสียง");$("micLabel").textContent="แตะเพื่อพูดอีกครั้ง";
+  $("level").style.width="0";prevKey=key();
+  analyze();draw();
+}
+function say(t){const m=$("msg");m.textContent=t;m.hidden=false}
+const dB=x=>20*Math.log10(Math.max(x,1e-4));
+const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+function sd(a){const m=mean(a);return Math.sqrt(mean(a.map(x=>(x-m)*(x-m))))}
+function median(a){const b=[...a].sort((x,y)=>x-y);return b[Math.floor(b.length/2)]}
+
+function analyze(){try{analyze2()}catch(e){say("วิเคราะห์ไม่สำเร็จ: "+e.message);try{renderHistory()}catch(x){}}}
+function analyze2(){
+  const it=item(),ul=$("results");ul.textContent="";
+  if(frames.length<10){renderPending();say("อัดสั้นเกินไป ลองใหม่อีกครั้ง");return}
+  const sorted=frames.map(f=>f.rms).sort((a,b)=>a-b),floor=sorted[Math.floor(sorted.length*0.1)];
+  const th=gateOn?Math.max(0.004,Math.min(floor*2.5,sorted[Math.floor(sorted.length*0.95)]*0.2)):-1,act=frames.filter(f=>f.rms>th);
+  if(act.length<12){renderPending();say("ไม่ได้ยินเสียงชัดพอ ขยับเข้าใกล้ไมโครโฟนราวหนึ่งคืบแล้วลองใหม่");return}
+  const tA=act[0].t,tB=act[act.length-1].t,span=Math.max(0.05,tB-tA),lv=dB(Math.sqrt(mean(act.map(f=>f.rms*f.rms))));lastLv=lv;
+  const pkdB=dB(Math.max(...act.map(f=>f.rms)));
+  const blen=(()=>{let rs=act[0].t,b=0;for(let i=1;i<act.length;i++){if(act[i].t-act[i-1].t>0.5){b=Math.max(b,act[i-1].t-rs);rs=act[i].t}}return Math.max(b,tB-rs)})();
+  let hnrVal=null,hzVal=null;
+  const lenRow=()=>{const h=loadHist().filter(r=>r.k===hk()&&r.len),best=h.length?Math.max(...h.map(r=>r.len)):0,pc=best?blen/best*100:0;
+    ul.appendChild(row("ความยาวลม",!best?"บันทึกแรก":blen>best?"สถิติใหม่":pc>=90?"ใกล้สถิติ":Math.round(pc)+"% ของสถิติ",!best?"info":pc>=90?"good":"info",
+      blen.toFixed(1)+" วินาทีในลมเดียว"+(best?" สถิติเดิม "+best.toFixed(1)+" วินาที":" ครั้งต่อไปจะเทียบกับค่านี้")))};
+  const fin=()=>{const g=ul.querySelectorAll(".pill.good").length,wn=ul.querySelectorAll(".pill.warn").length;
+    $("dbNow").textContent=lv.toFixed(0);$("lenNow").textContent=blen.toFixed(1);
+    $("hzNow").textContent=hzVal?Math.round(hzVal):"–";$("hzLab").textContent=hzVal?(it.k==="air"?"Hz เสียงลม":"Hz ความถี่ · "+noteName(hzVal)):"Hz ความถี่";
+    pushHist({ts:Date.now(),k:hk(),kind:it.k,t:it.t,len:+blen.toFixed(2),lv:+lv.toFixed(1),hz:hzVal?Math.round(hzVal):null,hnr:hnrVal==null?null:+hnrVal.toFixed(1),good:g,total:g+wn});
+    renderHistory()};
+  // loudness
+  if(clip>5)ul.appendChild(row("ความดัง","ดังเกิน","warn","เสียงแตก ถอยห่างไมโครโฟนหรือลดแรงเสียงลง"));
+  else if(lv<(it.k==="air"?-60:-48))ul.appendChild(row("ความดัง","เบาไป","warn","เฉลี่ย "+lv.toFixed(0)+" dB ใช้ลมจากท้องมากขึ้นหรือขยับเข้าใกล้ไมโครโฟน"));
+  else ul.appendChild(row("ความดัง","ดี","good","เฉลี่ย "+lv.toFixed(0)+" dB สูงสุด "+pkdB.toFixed(0)+" dB ดังพอและไม่แตก"));
+  // pitch series (3-point median, voiced only)
+  const v=act.filter(f=>f.f0>0),f0=v.map((f,i)=>median([v[Math.max(0,i-1)].f0,f.f0,v[Math.min(v.length-1,i+1)].f0]));
+  const st=(a,b)=>12*Math.log2(a/b);
+  if(it.k==="air"){const ps=act.map(f=>f.pk).filter(x=>x>0);if(ps.length>4)hzVal=median(ps)}else if(f0.length>=6)hzVal=median(f0);
+  const hnrRow=()=>{const rs=v.map(f=>f.r).filter(x=>x>0);if(rs.length<8)return;
+    const h=median(rs.map(x=>10*Math.log10(x/(1-x))));hnrVal=h;
+    ul.appendChild(row("ลมปนในเสียง",h>=10?"เสียงแน่น":h>=6?"มีลมปนบ้าง":"ลมรั่วมาก",h>=10?"good":h>=6?"info":"warn",
+      "เสียงก้องต่อเสียงซ่า "+h.toFixed(0)+" dB"+(h>=10?"":" ลองใช้เสียงเบาลงแต่ให้เส้นเสียงปิดสนิท และตรวจว่าห้องเงียบพอ")))};
+  const slopeRow=()=>{if(span<1.5)return;const xs=act.map(f=>f.t),ys=act.map(f=>dB(f.rms)),mx=mean(xs),my=mean(ys);
+    let n=0,d=0;for(let i=0;i<xs.length;i++){n+=(xs[i]-mx)*(ys[i]-my);d+=(xs[i]-mx)*(xs[i]-mx)}const k=d?n/d:0;
+    ul.appendChild(row("แรงลม",k>=-1.5?"คงที่":"ลมตก",k>=-1.5?"good":"warn",
+      (k>=-1.5?"ความดังเปลี่ยน ":"ความดังตก ")+Math.abs(k).toFixed(1)+" dB ต่อวินาที"+(k>=-1.5?"":" หายใจเข้าให้ลึกถึงท้อง แล้วปล่อยลมช้าลงตั้งแต่ต้น")))};
+  const freeStats=()=>{const q=frames.map(f=>f.rms).sort((a,b)=>a-b),t2=Math.max(0.004,Math.min(q[Math.floor(q.length*0.1)]*2.5,q[Math.floor(q.length*0.95)]*0.2)),a2=frames.filter(f=>f.rms>t2);
+    lastSpeakSec=0;if(a2.length<12)return;let pauses=0,rs=a2[0].t,longest=0,speak=0;
+    for(let i=1;i<a2.length;i++){if(a2[i].t-a2[i-1].t>0.3){pauses++;const r=a2[i-1].t-rs;longest=Math.max(longest,r);speak+=r;rs=a2[i].t}}
+    const lr=a2[a2.length-1].t-rs;longest=Math.max(longest,lr);speak+=lr;lastSpeakSec=speak;
+    ul.appendChild(row("จังหวะและการหยุด","ข้อมูล","info","พูดจริง "+speak.toFixed(1)+" วินาที จากที่อัด "+frames[frames.length-1].t.toFixed(1)+" วินาที · หยุด "+pauses+" ครั้ง · พูดต่อเนื่องนานสุด "+longest.toFixed(1)+" วินาที"+(longest>8?" ลองแบ่งวรรคหายใจให้ถี่ขึ้น":"")))};
+  const breathRow=()=>{if(span<5||!gateOn)return;let pauses=0,runStart=act[0].t,longest=0;
+    for(let i=1;i<act.length;i++){if(act[i].t-act[i-1].t>0.3){pauses++;longest=Math.max(longest,act[i-1].t-runStart);runStart=act[i].t}}
+    longest=Math.max(longest,tB-runStart);
+    ul.appendChild(row("ช่วงลมหายใจ","ข้อมูล","info","หยุด "+pauses+" ครั้ง พูดต่อเนื่องนานสุด "+longest.toFixed(1)+" วินาทีต่อหนึ่งลม"+(longest>8?" ลองแบ่งวรรคให้ถี่ขึ้นเพื่อไม่ให้ลมหมดท้ายวรรค":"")))};
+  if(it.k==="asp"){
+    const li=row("ลมพ่นพยัญชนะ",recorder?"กำลังวัด":"วัดไม่ได้","info",recorder?"รอสักครู่":"เบราว์เซอร์นี้อัดเสียงเพื่อวิเคราะห์ไม่ได้");li.id="aspRow";ul.appendChild(li);
+    if(!SR)ul.appendChild(row("ตรวจคำ","ใช้ไม่ได้","warn","เบราว์เซอร์นี้ไม่มีระบบรู้จำเสียง ให้เปิดไฟล์ด้วย Chrome หรือ Edge"));
+    if(SR){const a=row("ตรวจคำ","กำลังถอดเสียง","info","รอสักครู่");a.id="asrRow";ul.appendChild(a);
+      if(asrState!=="wait"&&asrState!=="listening")safeAsr();else setTimeout(()=>{if(asrState==="wait"){asrState="done";renderAsr()}},4000)}
+    fin();return;
+  }
+  if(it.k==="hold"){
+    if(f0.length<10)ul.appendChild(row("ความนิ่งของเสียง","วัดไม่ได้","info","ไม่พบเสียงก้อง ลองเปล่ง อา ให้ดังขึ้นเล็กน้อย"));
+    else{const m=median(f0),dev=sd(f0.map(x=>st(x,m)));
+      ul.appendChild(row("ความนิ่งของเสียง",dev<=0.5?"นิ่งดี":"แกว่ง",dev<=0.5?"good":"warn","แกว่ง "+dev.toFixed(2)+" ครึ่งเสียง รอบ "+m.toFixed(0)+" Hz"+(dev<=0.5?"":" ปล่อยลมให้สม่ำเสมอขึ้น")))}
+    ul.appendChild(row("ความยาว",blen>=5?"ถึงเป้า":"ยังสั้น",blen>=5?"good":"warn",blen.toFixed(1)+" วินาทีในลมเดียว จากเป้า 5 วินาที"));slopeRow();hnrRow();
+  }else if(it.k==="glide"){
+    if(f0.length<10)ul.appendChild(row("ช่วงเสียง","วัดไม่ได้","info","ไม่พบเสียงก้อง ลองฮัมให้ดังขึ้นเล็กน้อย"));
+    else{const s=[...f0].sort((a,b)=>a-b),lo=s[Math.floor(s.length*0.05)],hi=s[Math.floor(s.length*0.95)],r=st(hi,lo);
+      ul.appendChild(row("ช่วงเสียง",r>=7?"กว้างดี":"ยังแคบ",r>=7?"good":"warn",lo.toFixed(0)+" ถึง "+hi.toFixed(0)+" Hz กว้าง "+r.toFixed(1)+" ครึ่งเสียง"))}
+    hnrRow();
+  }else if(it.k==="air"){
+    const dv=sd(act.map(f=>dB(f.rms)));
+    ul.appendChild(row("ความสม่ำเสมอของลม",dv<=4?"สม่ำเสมอ":"แกว่ง",dv<=4?"good":"warn","ความดังแกว่ง "+dv.toFixed(1)+" dB"));
+    if(it.id==="hiss")lenRow();else ul.appendChild(row("ความยาว",blen>=8?"ถึงเป้า":"ยังสั้น",blen>=8?"good":"warn",blen.toFixed(1)+" วินาทีในลมเดียว จากเป้า 8 วินาที"));slopeRow();
+    if(hzVal)ul.appendChild(row("ความถี่เสียงลม","ข้อมูล","info","พลังงานมากที่สุดที่ราว "+Math.round(hzVal)+" Hz เสียง ซ ที่คมมักอยู่สูงกว่า 4000 Hz"));
+  }else if(it.k==="vow"){
+    lenRow();const dv=sd(act.map(f=>dB(f.rms)));
+    ul.appendChild(row("ความดังสม่ำเสมอ",dv<=5?"สม่ำเสมอ":"แกว่ง",dv<=5?"good":"warn","ความดังแกว่ง "+dv.toFixed(1)+" dB"+(dv<=5?"":" บางสระเบากว่า มักเป็น อี หรือ อู ให้ส่งลมเท่าเดิมทุกสระ")));
+    slopeRow();
+    if(hzVal)ul.appendChild(row("ความถี่เสียง","ข้อมูล","info","กลาง "+Math.round(hzVal)+" Hz ("+noteName(hzVal)+")"));
+    hnrRow();
+  }else{
+    const cut=tA+span*0.75,head=act.filter(f=>f.t<cut),tail=act.filter(f=>f.t>=cut);
+    if(it.k!=="free"&&head.length>3&&tail.length>3){const drop=mean(head.map(f=>dB(f.rms)))-mean(tail.map(f=>dB(f.rms)));
+      ul.appendChild(row("ท้ายประโยค",drop<=9?"ดี":"เสียงตก",drop<=9?"good":"warn",drop<=9?"ช่วงท้ายดังใกล้เคียงช่วงต้น (ต่าง "+Math.max(0,drop).toFixed(0)+" dB)":"ช่วงท้ายเบาลง "+drop.toFixed(0)+" dB หายใจให้พอก่อนเริ่ม และส่งเสียงถึงพยางค์สุดท้าย"))}
+    if(it.syl){const r=it.syl/span;
+      ul.appendChild(row("ความเร็ว",r>4.5?"เร็ว":r<1.5?"ช้ามาก":"ดี",r>4.5?"warn":r<1.5?"info":"good",r.toFixed(1)+" พยางค์ต่อวินาที ("+span.toFixed(1)+" วินาที)"+(r>4.5?" ลองช้าลงแล้วฟังว่าชัดทุกพยางค์หรือไม่":"")))}
+    else if(it.k==="free")freeStats();
+    else ul.appendChild(row("ความยาว","ข้อมูล","info","พูดอยู่ "+span.toFixed(1)+" วินาที"));
+    if(f0.length>=6){const s=[...f0].sort((a,b)=>a-b),lo=s[Math.floor(s.length*0.05)],hi=s[Math.floor(s.length*0.95)];
+      ul.appendChild(row("ระดับเสียงสูงต่ำ","ข้อมูล","info","กลาง "+Math.round(hzVal||lo)+" Hz ช่วง "+lo.toFixed(0)+" ถึง "+hi.toFixed(0)+" Hz กว้าง "+st(hi,lo).toFixed(1)+" ครึ่งเสียง"))}
+    hnrRow();breathRow();
+    if(!SR)ul.appendChild(row("ตรวจคำ","ใช้ไม่ได้","warn","เบราว์เซอร์นี้ไม่มีระบบรู้จำเสียง ให้เปิดไฟล์ด้วย Chrome หรือ Edge"));
+    if(SR){const li=row("ตรวจคำ","กำลังถอดเสียง","info","รอสักครู่");li.id="asrRow";ul.appendChild(li);
+      if(asrState!=="wait"&&asrState!=="listening")safeAsr();else setTimeout(()=>{if(asrState==="wait"){asrState="done";renderAsr()}},4000)}
+  }
+  fin();
+}
+function votWords(x){
+  const sr=16000,hop=80,win=320,minL=40,maxL=213,N=Math.floor((x.length-win-maxL)/hop);if(N<10)return [];
+  const rms=new Float32Array(N),vr=new Float32Array(N);
+  for(let i=0;i<N;i++){const o=i*hop;let c0=0;for(let j=0;j<win;j++)c0+=x[o+j]*x[o+j];rms[i]=Math.sqrt(c0/win);
+    if(rms[i]<0.004)continue;let best=0;
+    for(let lag=minL;lag<=maxL;lag+=1){let s=0,e=0;for(let j=0;j<win;j++){const y=x[o+j+lag];s+=x[o+j]*y;e+=y*y}const r=s/Math.sqrt(c0*e+1e-12);if(r>best)best=r}
+    vr[i]=best}
+  const sorted=[...rms].sort((a,b)=>a-b),th=Math.max(0.006,Math.min(sorted[Math.floor(N*0.1)]*3,sorted[Math.floor(N*0.95)]*0.2)),runs=[];let st=-1,last=-1;
+  for(let i=0;i<N;i++){if(rms[i]>th){if(st<0)st=i;else if(i-last>24){runs.push([st,last]);st=i}last=i}}
+  if(st>=0)runs.push([st,last]);
+  const out=[];
+  for(const [a,b] of runs){if(b-a<16)continue;let j=-1;
+    for(let i=a;i<=b-2;i++){if(vr[i]>0.55&&vr[i+1]>0.55&&vr[i+2]>0.55){j=i;break}}
+    if(j<0)continue;out.push(Math.max(0,(j-a)*5-5))}
+  return out;
+}
+async function analyzeAsp(blob){
+  const done=(p,c,n)=>{const li=$("aspRow");if(!li)return;const r=row("ลมพ่นพยัญชนะ",p,c,n);r.id="aspRow";li.replaceWith(r)};
+  try{
+    const C=window.AudioContext||window.webkitAudioContext,c=new C(),au=await c.decodeAudioData(await blob.arrayBuffer());c.close();
+    const off=new OfflineAudioContext(1,Math.ceil(Math.min(au.duration,12)*16000),16000),s=off.createBufferSource();s.buffer=au;s.connect(off.destination);s.start();
+    const v=votWords((await off.startRendering()).getChannelData(0));
+    if(v.length!==2){done("วัดไม่ได้","info","พบ "+v.length+" คำ ให้พูดสองคำแยกกัน เว้นช่วงเงียบสั้น ๆ ระหว่างคำ");return}
+    const ok1=v[0]<35,ok2=v[1]>=45,txt="คำแรกลมพ่นราว "+v[0]+" ms คำหลังราว "+v[1]+" ms";
+    if(ok1&&ok2)done("แยกชัด","good",txt);
+    else if(!ok2)done("คำหลังลมน้อย","warn",txt+" พ่นลมออกให้ชัดก่อนเริ่มสระ เอามือบังหน้าปากควรรู้สึกลม");
+    else done("คำแรกลมมาก","warn",txt+" ปิดริมฝีปากหรือลิ้นให้แน่น แล้วเปิดพร้อมเสียงสระทันที");
+  }catch(e){done("วัดไม่ได้","info","ถอดไฟล์เสียงที่อัดไม่ได้ในเบราว์เซอร์นี้")}
+}
+function norm(s){return s.replace(/[\s.,!?…ๆฯ"'“”\-]/g,"")}
+function lev(a,b){const m=a.length,n=b.length;let p=Array.from({length:n+1},(_,i)=>i);
+  for(let i=1;i<=m;i++){const c=[i];for(let j=1;j<=n;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[n]}
+function takeResults(e){
+  asrInterim="";
+  for(let i=e.resultIndex;i<e.results.length;i++){const R=e.results[i],tr=R[0].transcript;
+    if(R.isFinal){asrText+=tr;const alts=[];for(let k=1;k<R.length;k++)alts.push(R[k].transcript);asrFinals.push({t:tr,conf:R[0].confidence||0,alts})}
+    else asrInterim+=tr}
+}
+const segm=(t,g)=>{try{return [...new Intl.Segmenter("th",{granularity:g}).segment(t)]}catch(e){return null}};
+function graphemes(t){const x=segm(t,"grapheme");return x?x.map(o=>o.segment):Array.from(t)}
+function wordsOf(t){return t.trim().split(/\s+/).filter(Boolean).flatMap(p=>{const x=segm(p,"word");
+  const w=x?x.filter(o=>o.isWordLike).map(o=>norm(o.segment)).filter(Boolean):[];return w.length?w:[norm(p)]}).filter(Boolean)}
+function align(A,B){
+  const m=A.length,n=B.length,D=[];for(let i=0;i<=m;i++){D[i]=new Uint16Array(n+1);D[i][0]=i}for(let j=0;j<=n;j++)D[0][j]=j;
+  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)D[i][j]=Math.min(D[i-1][j]+1,D[i][j-1]+1,D[i-1][j-1]+(A[i-1]===B[j-1]?0:1));
+  const okA=new Array(m).fill(false),okB=new Array(n).fill(false),map=Array.from({length:m},()=>[]);let i=m,j=n;
+  while(i>0||j>0){
+    if(i>0&&j>0&&D[i][j]===D[i-1][j-1]+(A[i-1]===B[j-1]?0:1)){if(A[i-1]===B[j-1])okA[i-1]=okB[j-1]=true;map[i-1].push(j-1);i--;j--}
+    else if(j>0&&D[i][j]===D[i][j-1]+1){if(m)map[i>0?i-1:0].push(j-1);j--}
+    else i--}
+  return {okA,okB,map};
+}
+const TONE=/[่้๊๋]/g,noTone=t=>t.replace(TONE,"");
+const sound=t=>noTone(t.replace(/.์/g,"")).replace(/[ขฃคฅฆ]/g,"ค").replace(/[ฉชฌ]/g,"ช").replace(/[ซศษส]/g,"ส").replace(/[ฐฑฒถทธ]/g,"ท")
+  .replace(/[ผพภ]/g,"พ").replace(/[ฝฟ]/g,"ฟ").replace(/[ฎด]/g,"ด").replace(/[ฏต]/g,"ต").replace(/[ณน]/g,"น").replace(/[ญย]/g,"ย").replace(/[หฮ]/g,"ห").replace(/ฬ/g,"ล");
+function classify(w,h){
+  if(!h)return ["miss","ไม่ได้ยินคำนี้ อาจพูดเบาหรือรวบคำ"];
+  const rl=t=>t.replace(/[รล]/g,"*");
+  if(rl(w)===rl(h))return ["rl","ร กับ ล สลับกัน"];
+  if(noTone(rl(w))===noTone(rl(h))&&noTone(w)!==noTone(h))return ["rl","ร กับ ล สลับกัน และวรรณยุกต์ต่าง"];
+  const dropC=t=>t.replace(/([ก-ฮ])[รลว](?=[ะ-ูเ-ไ็-๎ก-ฮ]|$)/,"$1");
+  if(noTone(dropC(w))===noTone(h)&&dropC(w)!==w)return ["cl","เสียงควบกล้ำหาย"];
+  if(noTone(dropC(h))===noTone(w)&&dropC(h)!==h)return ["cl","มีเสียงควบกล้ำเกินมา"];
+  if(noTone(w)===noTone(h))return ["tone","วรรณยุกต์ต่าง"];
+  if(sound(w)===sound(h))return ["homo","สะกดต่างแต่เสียงใกล้กันมาก อาจเป็นคำพ้องเสียง"];
+  const ini=t=>(t.replace(/^[เแโใไ]/,"").match(/[ก-ฮ]/)||[""])[0];
+  if(ini(sound(w))===ini(sound(h)))return ["vf","พยัญชนะต้นตรง แต่สระหรือตัวสะกดต่าง"];
+  return ["other","ได้ยินเป็นคำอื่น"];
+}
+const CLRE=/^[เแโใไ]?(?:[กขค][รลว]|ตร|[ปพ][รล]|ผล)/;
+function hasCluster(w){const m=w.match(CLRE);if(!m)return false;const lead=/^[เแโใไ]/.test(w),rest=w.slice(m[0].length);
+  return m[0].slice(-1)==="ว"?(lead||/^[่้๊๋]?[ะาำิีึืุู็ั]/.test(rest)):(lead||(rest.length>0&&!/^[รเแโใไ]/.test(rest)))}
+function diffWords(a,b){const W=wordsOf(a),A=[],wi=[];W.forEach((w,k)=>graphemes(w).forEach(g=>{A.push(g);wi.push(k)}));const B=graphemes(norm(b)),al=align(A,B);
+  return W.map((w,k)=>{const idx=[];let ok=true;for(let i=0;i<A.length;i++)if(wi[i]===k){if(!al.okA[i])ok=false;idx.push(...al.map[i])}
+    return {w,h:[...new Set(idx)].sort((x,y)=>x-y).map(j=>B[j]).join(""),ok};}).filter(x=>!x.ok||x.h!==x.w)}
+function consonantReport(heard,box,el){
+  const all=wordsOf(heard),uniq=a=>[...new Set(a)],lowW=new Set(asrFinals.filter(f=>f.conf>0&&f.conf<0.7).flatMap(f=>wordsOf(f.t)));
+  const HL={rl:"ร หรือ ล อาจไม่ชัด",cl:"เสียงควบกล้ำอาจไม่ชัด",tone:"วรรณยุกต์อาจไม่ชัด",vf:"สระหรือตัวสะกดอาจไม่ชัด"},seen=new Set(),hes=[];
+  asrFinals.forEach(f=>f.alts.slice(0,3).forEach(a=>diffWords(f.t,a).forEach(x=>{const c=classify(x.w,x.h),k=x.w+"|"+x.h;if(HL[c[0]]&&x.h&&!seen.has(k)){seen.add(k);hes.push({w:x.w,h:x.h,k:c[0]})}})));
+  const flagged=new Set([...lowW,...hes.map(x=>x.w)]);
+  const cl=uniq(all.filter(hasCluster)),rr=uniq(all.filter(w=>!hasCluster(w)&&/ร/.test(w)&&!/รร/.test(w))),ll=uniq(all.filter(w=>!hasCluster(w)&&/ล/.test(w)));
+  const group=(label,list)=>{if(!list.length)return;const d=el("div"),c=el("div","wchips");d.append(el("span","lab",label+" ("+list.length+" คำ)"),c);
+    list.slice(0,24).forEach(w=>c.append(el("span",flagged.has(w)?"flag":"",w)));box.append(d)};
+  group("คำควบกล้ำที่พบ",cl);group("คำที่มี ร",rr);group("คำที่มี ล",ll);
+  if(!cl.length&&!rr.length&&!ll.length)box.append(el("div","dim","ไม่พบคำควบกล้ำ หรือคำที่มี ร ล ในสิ่งที่พูด"));
+  if(hes.length){const d=el("div"),u=el("ul");d.append(el("span","lab","จุดที่ระบบลังเล"),u);hes.slice(0,8).forEach(x=>u.append(el("li",null,"“"+x.w+"” หรือ “"+x.h+"” · "+HL[x.k])));box.append(d)}
+  const drill=uniq([...hes.map(x=>x.w),...cl,...rr,...ll]).slice(0,10);
+  if(drill.length){const b=el("button","mini","ฝึกคำเหล่านี้แบบเทียบรายคำ");b.onclick=()=>{if(recording)return;$("custom").value=drill.join(" ");cat=DRILLS.findIndex(x=>x.custom);idx=0;save();renderAll();window.scrollTo(0,0)};box.append(b)}
+  box.append(el("div","dim","ระบบเขียนคำตามพจนานุกรม การที่คำควบกล้ำปรากฏในข้อความจึงยังไม่ยืนยันว่าออกเสียงครบ คำที่มีกรอบคือคำที่ระบบไม่แน่ใจหรือลังเล ให้ฟังเสียงตัวเองที่คำเหล่านั้น แล้วกดปุ่มฝึกเพื่อตรวจทีละคำ"));
+  return hes.filter(x=>x.k==="rl"||x.k==="cl").length;
+}
+function freeRow(heard){
+  const el=(tag,cls,txt)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(txt!=null)x.textContent=txt;return x};
+  const n=wordsOf(heard).length,low=asrFinals.filter(f=>f.conf>0&&f.conf<0.7),li=el("li"),box=el("div","cmp");
+  li.append(el("span","r-name","ถอดคำพูด"),el("span","pill "+(low.length?"warn":"good"),low.length?"มีช่วงไม่ชัด "+low.length+" ช่วง":"ถอดได้ "+n+" คำ"));
+  const l=el("div"),t=el("div","big");l.append(el("span","lab","ระบบได้ยินว่า (ขีดเส้นใต้คือช่วงที่ระบบไม่แน่ใจ)"),t);
+  if(asrFinals.length)asrFinals.forEach(f=>t.append(el("span",f.conf>0&&f.conf<0.7?"g-bad":"",f.t+" ")));else t.textContent=heard;
+  if(asrInterim)t.append(el("span","",asrInterim));box.append(l);
+  const meta=[n+" คำ"];if(lastSpeakSec>1)meta.push("ความเร็ว "+Math.round(n/(lastSpeakSec/60))+" คำต่อนาที");
+  const cf=asrFinals.filter(f=>f.conf>0).map(f=>f.conf);if(cf.length)meta.push("ความมั่นใจของระบบเฉลี่ย "+Math.round(mean(cf)*100)+"%");
+  box.append(el("div","dim",meta.join(" · ")));
+  const nh=consonantReport(heard,box,el);if(nh){const p=li.children[1];p.className="pill warn";p.textContent="ควรตรวจ ร ล ควบกล้ำ "+nh+" จุด"}
+  box.append(el("div","dim",low.length?"ช่วงที่ขีดเส้นใต้คือจุดที่ระบบฟังไม่ชัด ลองฟังเสียงตัวเองตรงนั้นแล้วพูดซ้ำให้ช้าลง":"เทียบข้อความนี้กับสิ่งที่ตั้งใจพูด คำที่ระบบถอดผิดคือจุดที่ควรฝึกให้ชัดขึ้น"));
+  li.append(box);return li;
+}
+function detailRow(target,heard){
+  const W=wordsOf(target),el=(tag,cls,txt)=>{const x=document.createElement(tag);if(cls)x.className=cls;if(txt!=null)x.textContent=txt;return x};
+  const parts=target.trim().split(/\s+/),listMode=parts.length>1&&parts.every(p=>graphemes(p).length<=6);
+  let res=[],hd=[];
+  if(listMode){
+    const H=wordsOf(heard),m=W.length,n=H.length,G=0.7,sub=(a,b)=>a===b?0:Math.min(1.3,2*lev(a,b)/(a.length+b.length)),D=[];
+    for(let i=0;i<=m;i++){D[i]=new Float32Array(n+1);D[i][0]=i*G}for(let j=0;j<=n;j++)D[0][j]=j*G;
+    for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)D[i][j]=Math.min(D[i-1][j]+G,D[i][j-1]+G,D[i-1][j-1]+sub(W[i-1],H[j-1]));
+    let i=m,j=n;const tr=[],hr=[],eq=(a,b)=>Math.abs(a-b)<1e-4;
+    while(i>0||j>0){
+      if(i>0&&j>0&&eq(D[i][j],D[i-1][j-1]+sub(W[i-1],H[j-1]))){const a=graphemes(W[i-1]),b=graphemes(H[j-1]),al=align(a,b);
+        tr.unshift({w:W[i-1],h:H[j-1],ok:W[i-1]===H[j-1],gs:a.map((g,k)=>({g,ok:al.okA[k]}))});hr.unshift(b.map((g,k)=>({g,ok:al.okB[k]})));i--;j--}
+      else if(i>0&&eq(D[i][j],D[i-1][j]+G)){tr.unshift({w:W[i-1],h:"",ok:false,gs:graphemes(W[i-1]).map(g=>({g,ok:false}))});i--}
+      else{hr.unshift(graphemes(H[j-1]).map(g=>({g,ok:false})));j--}}
+    res=tr;hd=hr.flatMap((x,k)=>k?[{g:" ",ok:true},...x]:x);
+  }else{
+    const A=[],wi=[];W.forEach((w,k)=>graphemes(w).forEach(g=>{A.push(g);wi.push(k)}));const B=graphemes(norm(heard)),al=align(A,B);
+    res=W.map((w,k)=>{const idx=[],gs=[];let ok=true;for(let i=0;i<A.length;i++)if(wi[i]===k){if(!al.okA[i])ok=false;idx.push(...al.map[i]);gs.push({g:A[i],ok:al.okA[i]})}
+      const h=[...new Set(idx)].sort((a,b)=>a-b).map(j=>B[j]).join("");return {w,h,ok:ok&&h===w,gs}});
+    hd=B.map((g,j)=>({g,ok:al.okB[j]}));
+  }
+  const bad=res.filter(x=>!x.ok).map(x=>Object.assign(x,{c:classify(x.w,x.h)})),real=bad.filter(x=>x.c[0]!=="homo");
+  const okN=W.length-real.length,pc=okN/W.length;
+  const altHit=asrFinals.length===1&&asrFinals[0].alts.some(a=>norm(a)===norm(target));
+  const li=el("li"),box=el("div","cmp");
+  li.append(el("span","r-name","ตรวจคำ"),el("span","pill "+(!bad.length?"good":!real.length?"info":pc>=0.7?"info":"warn"),
+    !bad.length?"ตรงทุกคำ":!real.length?"น่าจะตรง":"ตรง "+okN+" จาก "+W.length+" คำ"));
+  const l1=el("div"),t1=el("div","big");l1.append(el("span","lab","เป้าหมาย (ขีดเส้นใต้คือจุดที่ไม่ตรง)"),t1);
+  res.forEach(x=>{const sp=el("span","w");x.gs.forEach(o=>sp.append(el("span",o.ok?"g-ok":"g-bad",o.g)));t1.append(sp)});
+  const l2=el("div"),t2=el("div","big");l2.append(el("span","lab","ระบบได้ยินว่า"),t2);
+  hd.forEach(o=>t2.append(el("span",o.ok?"g-ok":"g-bad",o.g)));
+  box.append(l1,l2);
+  if(bad.length){const d=el("div"),ul=el("ul");d.append(el("span","lab","รายคำที่ไม่ตรง"),ul);
+    bad.forEach(x=>ul.append(el("li",null,"“"+x.w+"” "+(x.h?"ได้ยินเป็น “"+x.h+"”":"")+" · "+x.c[1])));box.append(d);
+    const tips={rl:"ร: ปลายลิ้นสะบัดไม่แตะค้าง · ล: ปลายลิ้นแตะปุ่มเหงือกค้างไว้",cl:"ออกเสียงพยัญชนะตัวที่สองของคำควบให้ครบ ลองพูดช้าลง",
+      tone:"ดูเส้นระดับเสียงในกราฟเทียบกับวรรณยุกต์ของคำ",vf:"ลากสระให้ครบความยาว และปิดเสียงตัวสะกดให้ชัด",miss:"เว้นจังหวะระหว่างคำและรักษาความดังให้ถึงคำสุดท้าย"};
+    const kinds=[...new Set(real.map(x=>x.c[0]))].filter(k=>tips[k]);
+    if(kinds.length){const t=el("div"),u=el("ul");t.append(el("span","lab","วิธีแก้"),u);kinds.forEach(k=>u.append(el("li",null,tips[k])));box.append(t)}}
+  const meta=[];const cf=asrFinals.filter(f=>f.conf>0).map(f=>f.conf);
+  if(cf.length)meta.push("ความมั่นใจของระบบ "+Math.round(mean(cf)*100)+"%");
+  const alts=[...new Set(asrFinals.flatMap(f=>f.alts).map(a=>a.trim()).filter(a=>a&&norm(a)!==norm(heard)))].slice(0,3);
+  if(alts.length)meta.push("คำที่ระบบลังเล: "+alts.map(a=>"“"+a+"”").join(" "));
+  if(altHit&&bad.length)meta.push("คำเป้าหมายอยู่ในตัวเลือกรองของระบบ แปลว่าออกเสียงใกล้ถูกแล้ว");
+  if(bad.length)meta.push("ระบบสะกดตามคำที่มันเดา คำพ้องเสียงและคำที่ไม่มีความหมายจึงอาจถูกนับว่าไม่ตรง ให้ฟังเสียงตัวเองประกอบ");
+  if(meta.length)box.append(el("div","dim",meta.join(" · ")));
+  li.append(box);return li;
+}
+function safeAsr(){try{renderAsr()}catch(e){say("ตรวจคำขัดข้อง: "+e.message)}}
+function renderAsr(){
+  const li=$("asrRow");if(!li)return;const it=item(),heard=(asrText+asrInterim).trim();let r;
+  if(asrState==="error"&&!heard){
+    const why={"not-allowed":"เบราว์เซอร์ไม่อนุญาตให้ระบบรู้จำเสียงใช้ไมโครโฟน","service-not-allowed":"เบราว์เซอร์ปิดบริการรู้จำเสียงไว้",
+      "network":"ติดต่อบริการรู้จำเสียงไม่ได้ ตรวจอินเทอร์เน็ต และใช้ Chrome หรือ Edge ตัวจริง (Brave, Opera, Firefox ไม่มีบริการนี้)",
+      "language-not-supported":"บริการรู้จำเสียงของเบราว์เซอร์นี้ไม่รองรับภาษาไทย","audio-capture":"ระบบรู้จำเสียงเข้าถึงไมโครโฟนไม่ได้ อาจมีโปรแกรมอื่นใช้ไมค์อยู่",
+      "start-failed":"เริ่มระบบรู้จำเสียงไม่ได้"}[asrErr]||"ระบบรู้จำเสียงหยุดทำงาน";
+    r=row("ตรวจคำ","ใช้ไม่ได้","warn",why+(location.protocol==="file:"?" ไฟล์นี้เปิดจากเครื่องโดยตรง (file://) ซึ่ง Chrome มักไม่ให้ระบบรู้จำเสียงทำงาน":"")+" · รหัส: "+asrErr+" · ผลตรวจอื่นยังใช้ได้")}
+  else if(!heard){
+    const quiet=lastLv!=null&&lastLv<-35,lvTxt=lastLv!=null?" ระดับเสียงที่วัดได้เฉลี่ย "+lastLv.toFixed(0)+" dB":"";
+    let why=!asrAudio?"ระบบรู้จำเสียงไม่ได้รับสัญญาณจากไมโครโฟน อาจถูกกันเมื่ออัดพร้อมกัน หรือ Chrome ใช้ไมค์คนละตัว"
+      :!asrSpeech?"ระบบรู้จำเสียงได้รับสัญญาณ แต่เบาเกินกว่าจะนับเป็นเสียงพูด":"ระบบรู้จำเสียงได้ยินเสียงพูด แต่ถอดเป็นคำไม่ได้";
+    why+="."+lvTxt+(quiet?" ซึ่งเบา ให้เพิ่มระดับไมโครโฟนในการตั้งค่าเสียงของเครื่อง จนเสียงพูดปกติอยู่ราว -25 ถึง -12 dB":"");
+    if(micName)why+=" · ไมค์ที่ใช้อัด: "+micName+" ตรวจว่า Chrome เลือกไมค์ตัวเดียวกันที่ chrome://settings/content/microphone";
+    if(asrSolo)why="ตรวจคำอย่างเดียวก็ยังไม่ได้คำ ปัญหาจึงอยู่ที่ระดับเสียงไมค์หรือไมค์ที่ Chrome เลือก ไม่ใช่การอัดพร้อมกัน."+lvTxt;
+    r=row("ตรวจคำ","ไม่ได้ยินคำ","warn",why)}
+  else r=it.k==="free"?freeRow(heard):detailRow(it.t,heard);
+  if(!heard||asrState==="error"){const b=document.createElement("button");b.className="mini";b.textContent="ตรวจคำอย่างเดียว (พูดอีกครั้ง)";b.onclick=soloAsr;r.appendChild(b)}
+  r.id="asrRow";li.replaceWith(r);
+}
+function soloAsr(){
+  if(recording||!SR)return;const li=$("asrRow");if(li){const w=row("ตรวจคำ","กำลังฟัง","info","พูดคำหรือประโยคด้านบนได้เลย ระบบจะหยุดเองเมื่อคุณเงียบ");w.id="asrRow";li.replaceWith(w)}
+  if(solo){try{solo.abort()}catch(e){}}
+  asrText="";asrFinals=[];asrInterim="";asrErr="";asrAudio=asrSpeech=false;asrSolo=true;asrState="listening";
+  try{solo=new SR();solo.lang="th-TH";solo.maxAlternatives=5;solo.continuous=false;solo.interimResults=true;
+    solo.onaudiostart=()=>{asrAudio=true};solo.onspeechstart=()=>{asrSpeech=true};
+    solo.onresult=e=>{takeResults(e);
+      say("ระบบได้ยินว่า: "+(asrText+asrInterim))};
+    solo.onerror=e=>{if(e.error!=="no-speech"&&e.error!=="aborted"){asrErr=e.error||"unknown";asrState="error"}};
+    solo.onend=()=>{if(asrState==="listening")asrState="done";solo=null;renderAsr()};
+    solo.start();setTimeout(()=>{if(solo){try{solo.stop()}catch(e){}}},15000);
+  }catch(e){asrErr="start-failed";asrState="error";solo=null;renderAsr()}
+}
+
+function draw(){
+  const cv=$("cv"),dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;
+  if(cv.width!==Math.round(W*dpr)){cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr)}
+  const g=cv.getContext("2d");g.setTransform(dpr,0,0,dpr,0,0);g.clearRect(0,0,W,H);
+  const L=38,R=8,T=10,Bp=H-48,Bl=H-8,line=css("--line"),muted=css("--muted");
+  const last=frames.length?frames[frames.length-1].t:0,pl=prev&&prev.length?prev[prev.length-1].t:0,tmax=Math.max(4,last,pl);
+  const X=t=>L+(W-L-R)*t/tmax,lo=Math.log2(75),hi=Math.log2(450),Y=f=>Bp-(Bp-T)*(Math.log2(f)-lo)/(hi-lo);
+  g.font="11px "+css("--body");g.fillStyle=muted;g.strokeStyle=line;g.lineWidth=1;g.textBaseline="middle";g.textAlign="right";
+  [100,200,400].forEach(f=>{const y=Y(f);g.beginPath();g.moveTo(L,y);g.lineTo(W-R,y);g.stroke();g.fillText(f,L-6,y)});
+  g.textAlign="center";g.textBaseline="top";
+  const step=tmax<=8?1:tmax<=30?5:tmax<=120?15:tmax<=300?60:120;for(let t=0;t<=tmax;t+=step){g.fillText(tmax>120?mmss(t):t+"s",X(t),Bl-2)}
+  if(!frames.length&&!prev){g.textBaseline="middle";g.font="14px "+css("--body");g.fillText("เส้นระดับเสียงจะขึ้นที่นี่เมื่อเริ่มพูด",L+(W-L-R)/2,(T+Bp)/2);return}
+  // loudness strip
+  g.fillStyle=css("--loud");const h=Bl-14-Bp;
+  const dec=fr=>{const k=Math.ceil(fr.length/1500);return k<=1?fr:fr.filter((_,i)=>i%k===0)},fd=dec(frames),gapT=Math.max(0.12,tmax/500);
+  fd.forEach(f=>{const a=Math.max(0,Math.min(1,(dB(f.rms)+80)/75));g.fillRect(X(f.t),Bl-14-h*a,Math.max(1.5,(W-L-R)/Math.max(fd.length,tmax*45)),h*a)});
+  const path=(fr,col,w)=>{g.strokeStyle=col;g.lineWidth=w;g.lineJoin="round";g.lineCap="round";g.beginPath();let pen=false,pt=0;
+    fr.forEach(f=>{if(f.f0>75&&f.f0<450){const x=X(f.t),y=Y(f.f0);if(pen&&f.t-pt<gapT)g.lineTo(x,y);else g.moveTo(x,y);pen=true;pt=f.t}else pen=false});g.stroke()};
+  if(prev)path(dec(prev),css("--trace-prev"),2);
+  path(fd,css("--trace"),2.5);
+}
+
+$("mic").onclick=()=>{if(starting)return;recording?stop():start()};
+$("prev").onclick=()=>{if(recording)return;const n=DRILLS[cat].items.length;idx=(idx+n-1)%n;save();renderAll()};
+$("next").onclick=()=>{if(recording)return;idx=(idx+1)%DRILLS[cat].items.length;save();renderAll()};
+$("custom").oninput=()=>{$("phrase").textContent=$("custom").value.trim()||"ข้อความของคุณ";$("model").hidden=!(thaiVoice&&$("custom").value.trim())};
+$("model").onclick=()=>{try{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(item().t);u.voice=thaiVoice;u.lang="th-TH";u.rate=0.8;speechSynthesis.speak(u)}catch(e){}};
+function findVoice(){try{thaiVoice=speechSynthesis.getVoices().find(v=>/^th/i.test(v.lang))||null}catch(e){thaiVoice=null}
+  const it=item();$("model").hidden=!(thaiVoice&&it.t&&["w","s","asp"].includes(it.k))}
+if("speechSynthesis" in window){findVoice();speechSynthesis.onvoiceschanged=findVoice}
+$("cons").value=cons;
+$("cons").oninput=()=>{if(recording)return;cons=$("cons").value.trim()||"ม";save();const keep=$("cons");renderAll();keep.focus()};
+["ม","น","ล","ร","ว","ย","ง","ป","พ","กร"].forEach(c=>{const b=document.createElement("button");b.className="chip";b.textContent=c;
+  b.onclick=()=>{if(recording)return;cons=c;$("cons").value=c;save();renderAll()};$("consChips").appendChild(b)});
+$("gate").checked=gateOn;$("gate").onchange=()=>{gateOn=$("gate").checked;save()};
+$("hCsv").onclick=()=>{const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"';
+  const rows=[["วันที่เวลา","แบบฝึก","ความยาวลม (วินาที)","ความดัง (dB)","ความถี่ (Hz)","ลมปนในเสียง (dB)","ข้อที่ผ่าน","ข้อทั้งหมด"]]
+    .concat(loadHist().map(r=>[new Date(r.ts).toLocaleString("th-TH"),r.t,r.len,r.lv,r.hz,r.hnr,r.good,r.total]));
+  const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff"+rows.map(r=>r.map(q).join(",")).join("\r\n")],{type:"text/csv"}));
+  a.download="ผลการฝึกเสียง.csv";document.body.appendChild(a);a.click();a.remove()};
+window.addEventListener("error",e=>{say("เกิดข้อผิดพลาดในเครื่องมือ: "+e.message+" ช่วยส่งข้อความนี้ให้ผู้พัฒนา")});
+$("hClear").onclick=()=>{$("hClear").hidden=true;$("hYes").hidden=$("hNo").hidden=false};
+$("hNo").onclick=()=>{$("hYes").hidden=$("hNo").hidden=true;renderHistory()};
+$("hYes").onclick=()=>{memHist=[];try{localStorage.removeItem("vc_hist")}catch(e){}$("hYes").hidden=$("hNo").hidden=true;renderHistory();renderPending()};
+window.addEventListener("resize",draw);
+if(window.matchMedia)matchMedia("(prefers-color-scheme: dark)").addEventListener("change",draw);
+if(document.fonts&&document.fonts.ready)document.fonts.ready.then(draw);
+if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){const n=$("envNote");n.hidden=false;
+  n.textContent="หน้านี้ใช้ไมโครโฟนไม่ได้ในตอนนี้ เบราว์เซอร์บนมือถือไม่อนุญาตให้ไฟล์ที่เปิดจากเครื่องโดยตรงใช้ไมค์ ต้องเปิดผ่านลิงก์ที่ขึ้นต้นด้วย https บนคอมพิวเตอร์ให้เปิดไฟล์ด้วย Chrome หรือ Edge";
+  $("mic").disabled=true;$("mic").style.opacity=".4";$("micLabel").textContent="ไมโครโฟนใช้ไม่ได้ในหน้านี้"}
+renderAll();
+</script>
+</body>
+</html>
