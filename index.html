@@ -723,7 +723,10 @@ $("hCsv").onclick=()=>{const q=v=>'"'+String(v==null?"":v).replace(/"/g,'""')+'"
 window.addEventListener("error",e=>{say("เกิดข้อผิดพลาดในเครื่องมือ: "+e.message+" ช่วยส่งข้อความนี้ให้ผู้พัฒนา")});
 $("hClear").onclick=()=>{$("hClear").hidden=true;$("hYes").hidden=$("hNo").hidden=false};
 $("hNo").onclick=()=>{$("hYes").hidden=$("hNo").hidden=true;renderHistory()};
-$("hYes").onclick=()=>{memHist=[];try{localStorage.removeItem("vc_hist")}catch(e){}$("hYes").hidden=$("hNo").hidden=true;renderHistory();renderPending()};
+$("hYes").onclick=()=>{if(recording)return;memHist=[];try{localStorage.removeItem("vc_hist")}catch(e){}$("hYes").hidden=$("hNo").hidden=true;
+  frames=[];prev=null;prevKey="";chunks=[];asrText="";asrInterim="";asrFinals=[];lastLv=null;
+  const p=$("play");try{p.pause();if(p.src)URL.revokeObjectURL(p.src)}catch(e){}p.removeAttribute("src");try{p.load()}catch(e){}
+  renderAll();$("micLabel").textContent="แตะเพื่อเริ่มพูด";say("ล้างข้อมูลการฝึก กราฟ และเสียงที่อัดไว้แล้ว")};
 window.addEventListener("resize",draw);
 if(window.matchMedia)matchMedia("(prefers-color-scheme: dark)").addEventListener("change",draw);
 if(document.fonts&&document.fonts.ready)document.fonts.ready.then(draw);
